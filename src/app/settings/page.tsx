@@ -20,6 +20,11 @@ import { useT } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useBrandStore } from "@/lib/stores/brand-store";
 import { resolveTTSConfig, isPaidTTSReady } from "@/lib/tts-presets";
+import {
+  getQwenNonRealtimeVoice,
+  isQwenNonRealtimeTtsModel,
+  QWEN_NON_REALTIME_VOICES,
+} from "@/lib/qwen-tts-voices";
 import { mergeCustomModels } from "@/lib/gen-params";
 import { ModelPicker } from "@/components/settings/model-picker";
 import { GenerationSettings } from "@/components/generation-settings";
@@ -224,6 +229,8 @@ export default function SettingsPage() {
   };
 
   const ttsReady = isPaidTTSReady(tts, providers);
+  const isQwenTtsModel = isQwenNonRealtimeTtsModel(tts.model);
+  const selectedQwenVoice = getQwenNonRealtimeVoice(tts.voice);
 
   // save feedback state
 
@@ -622,7 +629,50 @@ export default function SettingsPage() {
                       <p className="text-xs text-muted-foreground">使用当前 Huabot API Key 与 OpenAI 兼容语音接口。</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{t("ttsModelLabel")}</Label><Input value={tts.model} onChange={(e) => setTTS({ ...tts, provider: "openai", baseUrl: "https://huabot.com/v1", model: e.target.value })} placeholder="qwen3-tts-flash" className="font-mono text-xs" /></div>
-                        <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{t("ttsVoiceLabel")}</Label><Input value={tts.voice} onChange={(e) => setTTS({ ...tts, provider: "openai", baseUrl: "https://huabot.com/v1", voice: e.target.value })} className="font-mono text-xs" /></div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">{t("ttsVoiceLabel")}</Label>
+                          {isQwenTtsModel && (
+                            <Select
+                              value={selectedQwenVoice?.voice ?? null}
+                              onValueChange={(voice) => {
+                                if (typeof voice === "string") {
+                                  setTTS({ ...tts, provider: "openai", baseUrl: "https://huabot.com/v1", voice });
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="w-full font-mono text-xs">
+                                <SelectValue>
+                                  {(voice: string | null) => {
+                                    const option = getQwenNonRealtimeVoice(voice);
+                                    return option ? `${option.name} (${option.voice})` : "选择 Qwen 音色";
+                                  }}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {QWEN_NON_REALTIME_VOICES.map((voice) => (
+                                  <SelectItem key={voice.voice} value={voice.voice} className="py-2">
+                                    <span className="flex min-w-0 flex-col items-start gap-0.5 whitespace-normal">
+                                      <span className="font-medium">{voice.name} ({voice.voice})</span>
+                                      <span className="text-xs text-muted-foreground">{voice.description}</span>
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          <Input
+                            value={tts.voice}
+                            onChange={(e) => setTTS({ ...tts, provider: "openai", baseUrl: "https://huabot.com/v1", voice: e.target.value })}
+                            placeholder={isQwenTtsModel ? "自定义音色 ID" : undefined}
+                            className="font-mono text-xs"
+                          />
+                          {isQwenTtsModel && selectedQwenVoice && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {selectedQwenVoice.description}
+                              {selectedQwenVoice.languages?.length ? ` · ${selectedQwenVoice.languages.join("、")}` : ""}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
                       {/* preview playback */}
