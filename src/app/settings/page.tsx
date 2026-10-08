@@ -626,7 +626,6 @@ export default function SettingsPage() {
 
                   {tts.enabled && (
                     <div className="space-y-4">
-                      <p className="text-xs text-muted-foreground">使用当前 Huabot API Key 与 OpenAI 兼容语音接口。</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{t("ttsModelLabel")}</Label><Input value={tts.model} onChange={(e) => setTTS({ ...tts, provider: "openai", baseUrl: "https://huabot.com/v1", model: e.target.value })} placeholder="qwen3-tts-flash" className="font-mono text-xs" /></div>
                         <div className="space-y-1.5">

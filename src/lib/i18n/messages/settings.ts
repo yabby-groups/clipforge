@@ -5,8 +5,7 @@ export const settings: NamespaceMessages = {
   zh: {
     backHome: "返回首页",
     pageTitle: "设置",
-    pageSubtitle:
-      "配置 AI 服务后即可开始生成带货视频。需要配置 LLM（生成脚本）+ 至少一个 AI 平台（生成图片/视频）。",
+    pageSubtitle: "配置 AI 服务后即可开始生成带货视频。",
 
     // 新手一键接入 Atlas
     oneKeyTitle: "新手推荐 · 一个 Key 全搞定",
@@ -86,8 +85,7 @@ export const settings: NamespaceMessages = {
     // TTS 配音
     ttsSample: "这款产品真的太好用了，赶紧下单试试吧！",
     ttsTitle: "配音 TTS",
-    ttsSubtitle:
-      "开启后合成会为每个分镜生成口播配音（支持 OpenAI 兼容 / Atlas Cloud / MiniMax / fal.ai）",
+    ttsSubtitle: "开启后合成会为每个分镜生成口播配音",
     ttsProviderLabel: "配音平台",
     ttsProviderFallback: "OpenAI 兼容",
     ttsPresetHint: "快捷预设（点击填入 baseUrl 和模型，还需填 API Key）：",
@@ -283,8 +281,7 @@ export const settings: NamespaceMessages = {
     // TTS voiceover
     ttsSample: "This product is amazing — order yours now and give it a try!",
     ttsTitle: "Voiceover (TTS)",
-    ttsSubtitle:
-      "When enabled, composition generates a spoken voiceover for each shot (supports OpenAI-compatible / Atlas Cloud / MiniMax / fal.ai)",
+    ttsSubtitle: "When enabled, composition generates a spoken voiceover for each shot",
     ttsProviderLabel: "Voiceover platform",
     ttsProviderFallback: "OpenAI-compatible",
     ttsPresetHint: "Quick presets (click to fill baseUrl and model — you still need an API key):",
