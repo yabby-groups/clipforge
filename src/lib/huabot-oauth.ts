@@ -13,6 +13,13 @@ type Tokens = { accessToken: string; refreshToken: string; accessExpiresAt: numb
 type OAuthSession = { device?: DeviceGrant; tokens?: Tokens; profile?: { id?: number | string; nick_name?: string; name?: string; profile?: { avatar_url?: string } } };
 export type HuabotKey = { id: number; name: string; masked: string; key: string };
 
+class HuabotApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "HuabotApiError";
+  }
+}
+
 function encryptionKey(): Buffer {
   const configured = process.env.CLIPFORGE_OAUTH_ENCRYPTION_KEY?.trim();
   if (!configured) throw new Error("OAuth secure storage is not configured");
@@ -77,17 +84,52 @@ export async function beginDeviceAuthorization(id: string): Promise<DeviceGrant>
 
 export async function refreshIfNeeded(id: string, session: OAuthSession): Promise<OAuthSession> {
   if (!session.tokens || session.tokens.accessExpiresAt > Date.now() + 60_000) return session;
+  return refreshSession(id, session);
+}
+
+async function refreshAccessToken(id: string, session: OAuthSession): Promise<OAuthSession> {
+  if (!session.tokens) return session;
   const { response, json } = await form("/oauth/token", { grant_type: "refresh_token", client_id: HUABOT_CLIENT_ID, refresh_token: session.tokens.refreshToken });
-  if (!response.ok || typeof json.access_token !== "string" || typeof json.refresh_token !== "string") {
+  if (!response.ok || typeof json.access_token !== "string") {
     if (refreshTokenIsInvalid(response.status, json.error)) {
       await removeSession(id);
       throw new Error("Huabot login expired. Please sign in again.");
     }
     throw new Error(String(json.error_description || "Unable to refresh Huabot login. Please try again."));
   }
-  session.tokens = { accessToken: json.access_token, refreshToken: json.refresh_token, accessExpiresAt: Date.now() + (Number(json.expires_in) || 3600) * 1000 };
-  await saveSession(id, session);
-  return session;
+  const next: OAuthSession = {
+    ...session,
+    tokens: {
+      accessToken: json.access_token,
+      refreshToken: typeof json.refresh_token === "string" && json.refresh_token ? json.refresh_token : session.tokens.refreshToken,
+      accessExpiresAt: Date.now() + (Number(json.expires_in) || 3600) * 1000,
+    },
+  };
+  await saveSession(id, next);
+  return next;
+}
+
+const pendingTokenRefreshes = new Map<string, Promise<OAuthSession>>();
+
+async function refreshSession(id: string, session: OAuthSession, rejectedAccessToken?: string): Promise<OAuthSession> {
+  const pending = pendingTokenRefreshes.get(id);
+  if (pending) return pending;
+
+  const refresh = (async () => {
+    // Another request may already have refreshed and persisted this session.
+    const latest = await loadSession(id);
+    const current = latest?.tokens ? latest : session;
+    if (!current.tokens) throw new Error("Not signed in to Huabot");
+    if (rejectedAccessToken && current.tokens.accessToken !== rejectedAccessToken) return current;
+    if (!rejectedAccessToken && current.tokens.accessExpiresAt > Date.now() + 60_000) return current;
+    return refreshAccessToken(id, current);
+  })();
+  pendingTokenRefreshes.set(id, refresh);
+  try {
+    return await refresh;
+  } finally {
+    if (pendingTokenRefreshes.get(id) === refresh) pendingTokenRefreshes.delete(id);
+  }
 }
 
 export async function pollDeviceAuthorization(id: string, session: OAuthSession): Promise<{ state: "pending" | "authorized" | "failed"; retryAfter?: number; message?: string; session?: OAuthSession }> {
@@ -150,8 +192,14 @@ async function huabotJson(path: string, accessToken: string, method = "GET") {
     err?: string;
     error?: string;
   };
-  if (!response.ok) throw new Error(body.err || body.error || "Unable to load Huabot keys");
+  if (!response.ok) throw new HuabotApiError(response.status, body.err || body.error || `Unable to load Huabot keys (${response.status})`);
   return body;
+}
+
+export function isAuthenticationFailure(error: unknown): boolean {
+  if (error instanceof HuabotApiError && (error.status === 401 || error.status === 403)) return true;
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("http 401") || message.includes("http 403") || message.includes("unauthorized") || message.includes("forbidden");
 }
 
 export async function fetchHuabotKeys(accessToken: string): Promise<HuabotKey[]> {
@@ -169,7 +217,14 @@ export async function fetchHuabotKeys(accessToken: string): Promise<HuabotKey[]>
 
 export async function listHuabotKeys(id?: string): Promise<HuabotKey[]> {
   const session = await authorizedSession(id);
-  return fetchHuabotKeys(session.tokens!.accessToken);
+  const accessToken = session.tokens!.accessToken;
+  try {
+    return await fetchHuabotKeys(accessToken);
+  } catch (error) {
+    if (!id || !isAuthenticationFailure(error)) throw error;
+    const refreshed = await refreshSession(id, session, accessToken);
+    return fetchHuabotKeys(refreshed.tokens!.accessToken);
+  }
 }
 
 export async function revokeAndRemove(id?: string): Promise<void> {

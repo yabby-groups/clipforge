@@ -165,7 +165,10 @@ export function buildVideoOptions(p: VideoGenParams | undefined): Record<string,
 
 /** Map a text-to-image model to its edit / image-to-image variant (product-fidelity redraw with reference images) */
 export function toEditVariant(modelId: string): string {
-  if (modelId === "openai/gpt-image-2") return "openai/gpt-image-2/image-to-image";
+  // OpenAI-compatible edit requests select the edit capability through
+  // /v1/images/edits, not a model-name suffix. Huabot registers this model
+  // under its canonical unprefixed alias only.
+  if (modelId === "gpt-image-2" || modelId === "openai/gpt-image-2") return "gpt-image-2";
   if (modelId === "fal-ai/gpt-image-1.5") return "fal-ai/gpt-image-1.5/edit";
   // Replicate FLUX text-to-image → Kontext edit model
   if (modelId.startsWith("black-forest-labs/flux") && !modelId.includes("kontext")) {

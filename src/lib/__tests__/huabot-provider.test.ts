@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HuabotProvider, resolveHuabotVideoModel } from "@/lib/providers/huabot";
+import { toEditVariant } from "@/lib/gen-params";
 
 describe("HuabotProvider", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -25,6 +26,45 @@ describe("HuabotProvider", () => {
     const provider = new HuabotProvider({ name: "huabot", apiKey: "test", baseUrl: "https://huabot.com" });
     await expect(provider.submitVideoTask!({ modelId: "seedance-2.0", mode: "text-to-video", prompt: "test" })).resolves.toEqual({ taskId: "task-1", modelId: "doubao-seedance-2.0" });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the OpenAI-compatible Images API for text-to-image", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ b64_json: "aW1hZ2U=" }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new HuabotProvider({ name: "huabot", apiKey: "test", baseUrl: "https://huabot.com" });
+
+    await expect(provider.generateImage({ modelId: "gpt-image-2", mode: "text-to-image", prompt: "test", width: 1024, height: 1024 })).resolves.toMatchObject({ modelId: "gpt-image-2" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://huabot.com/v1/images/generations",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ model: "gpt-image-2", prompt: "test", n: 1, size: "1024x1024" }) }),
+    );
+  });
+
+  it("uses the OpenAI-compatible edit endpoint and uploads reference images", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ b64_json: "aW1hZ2U=" }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new HuabotProvider({ name: "huabot", apiKey: "test", baseUrl: "https://huabot.com" });
+
+    await provider.generateImage({
+      modelId: toEditVariant("gpt-image-2"),
+      mode: "image-to-image",
+      prompt: "test",
+      referenceImageUrls: ["data:image/png;base64,aW1hZ2U="],
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://huabot.com/v1/images/edits");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    const form = init.body as FormData;
+    expect(form.get("model")).toBe("gpt-image-2");
+    expect(form.getAll("image[]")).toHaveLength(1);
+  });
+
+  it("uses Huabot's canonical GPT Image model for the edit endpoint", () => {
+    expect(toEditVariant("gpt-image-2")).toBe("gpt-image-2");
+    expect(toEditVariant("openai/gpt-image-2")).toBe("gpt-image-2");
   });
 
   it("only maps the Seedance aliases supported by Newversion", () => {

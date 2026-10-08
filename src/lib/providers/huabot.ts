@@ -39,10 +39,87 @@ export class HuabotProvider extends BaseProvider {
   constructor(config: ProviderConfig) { super({ ...config, baseUrl: (config.baseUrl || "https://huabot.com").replace(/\/$/, "") }); }
 
   async generateImage(options: ImageOptions): Promise<ImageResult> {
-    const response = await this.request<{ data?: Array<{ url?: string; b64_json?: string }> }>("/api/v1/images", { method: "POST", body: { model: options.modelId, prompt: options.prompt, n: options.count ?? 1, ...(options.width && options.height ? { size: `${options.width}x${options.height}` } : {}), ...(options.referenceImageUrl ? { image: options.referenceImageUrl } : {}), ...options.extra } });
+    const hasReferences = Boolean(options.referenceImageUrl || options.referenceImageUrls?.length);
+    const response = hasReferences
+      ? await this.editImage(options)
+      : await this.request<{ data?: Array<{ url?: string; b64_json?: string }> }>("/v1/images/generations", {
+          method: "POST",
+          body: {
+            model: options.modelId,
+            prompt: options.prompt,
+            n: options.count ?? 1,
+            ...(options.width && options.height ? { size: `${options.width}x${options.height}` } : {}),
+            ...options.extra,
+          },
+        });
     const imageUrls = (response.data ?? []).map((item) => item.url ?? (item.b64_json ? `data:image/png;base64,${item.b64_json}` : "")).filter(Boolean);
     if (!imageUrls.length) throw new ProviderError("Huabot image response has no output", "NO_RESULT", this.name);
     return { taskId: `huabot-image-${Date.now()}`, imageUrls, modelId: options.modelId };
+  }
+
+  /** OpenAI-compatible image editing is multipart; preserve all ordered references. */
+  private async editImage(options: ImageOptions): Promise<{ data?: Array<{ url?: string; b64_json?: string }> }> {
+    const references = [
+      ...(options.referenceImageUrls ?? []),
+      ...(options.referenceImageUrl && !options.referenceImageUrls?.length ? [options.referenceImageUrl] : []),
+    ];
+    const form = new FormData();
+    form.append("model", options.modelId);
+    form.append("prompt", options.prompt);
+    form.append("n", String(options.count ?? 1));
+    if (options.width && options.height) form.append("size", `${options.width}x${options.height}`);
+    for (const reference of references) {
+      const { blob, filename } = await this.fetchReferenceImage(reference);
+      form.append("image[]", blob, filename);
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.config.timeout ?? 120_000);
+    try {
+      const response = await fetch(`${this.config.baseUrl}/v1/images/edits`, {
+        method: "POST",
+        headers: this.getAuthHeaders(),
+        body: form,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new ProviderError(
+          `API 请求失败: ${response.status} ${response.statusText} - ${await response.text().catch(() => "")}`,
+          "API_ERROR",
+          this.name,
+          response.status,
+        );
+      }
+      return await response.json() as { data?: Array<{ url?: string; b64_json?: string }> };
+    } catch (error) {
+      if (error instanceof ProviderError) throw error;
+      const timedOut = error instanceof DOMException && error.name === "AbortError";
+      throw new ProviderError(timedOut ? "请求超时（120000ms）" : `网络请求异常: ${error instanceof Error ? error.message : String(error)}`, timedOut ? "TIMEOUT" : "NETWORK_ERROR", this.name);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async fetchReferenceImage(reference: string): Promise<{ blob: Blob; filename: string }> {
+    if (reference.startsWith("data:")) {
+      const comma = reference.indexOf(",");
+      if (comma === -1) throw new ProviderError("参考图 data URI 解析失败", "BAD_REFERENCE", this.name);
+      const mime = reference.slice(5, comma).split(";")[0] || "image/png";
+      const encoded = reference.slice(comma + 1);
+      const bytes = /;base64/i.test(reference.slice(0, comma)) ? Buffer.from(encoded, "base64") : Buffer.from(decodeURIComponent(encoded));
+      return { blob: new Blob([new Uint8Array(bytes)], { type: mime }), filename: `image.${this.extensionFromMime(mime)}` };
+    }
+    const response = await fetch(reference);
+    if (!response.ok) throw new ProviderError(`参考图下载失败: ${response.status}`, "BAD_REFERENCE", this.name);
+    const blob = await response.blob();
+    const mime = blob.type || response.headers.get("content-type") || "image/png";
+    return { blob, filename: `image.${this.extensionFromMime(mime)}` };
+  }
+
+  private extensionFromMime(mime: string): string {
+    if (mime.includes("webp")) return "webp";
+    if (mime.includes("jpeg") || mime.includes("jpg")) return "jpg";
+    return "png";
   }
 
   async submitVideoTask(options: VideoOptions): Promise<{ taskId: string; modelId: string }> {

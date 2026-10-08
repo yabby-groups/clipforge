@@ -87,6 +87,8 @@ export interface SettingsState {
   locale: Locale;
   // 语言来源：auto=跟随系统语言自动判定，user=用户手动选过（不再自动覆盖）
   localeSource: "auto" | "user";
+  // 已选择的 Huabot Key ID；仅用于恢复脱敏标签，不保存 Key 名称或额外凭据。
+  selectedHuabotKeyId: string;
   huabotBackup?: Pick<SettingsState, "llm" | "tts" | "defaultImageModel" | "defaultVideoModel">;
 
   // Actions
@@ -113,7 +115,7 @@ export interface SettingsState {
   applyProductionProfile: (profile: ProductionProfileId) => void;
   /** 一个 Atlas Key 一键接入：脚本+看图+生图+生视频+配音全配好（不覆盖用户已选模型/已开的配音） */
   applyAtlasOneKey: (apiKey: string) => void;
-  applyHuabotOneKey: (apiKey: string) => void;
+  applyHuabotOneKey: (apiKey: string, keyId: string) => void;
   disconnectHuabot: () => void;
 }
 
@@ -233,6 +235,7 @@ export const useSettingsStore = create<SettingsState>()(
       activeProductionProfile: "balanced",
       locale: DEFAULT_LOCALE,
       localeSource: "auto",
+      selectedHuabotKeyId: "",
 
       // 用户手动切换：记为 user，之后不再被自动判定覆盖
       setLocale: (locale) => set({ locale, localeSource: "user" }),
@@ -291,10 +294,11 @@ export const useSettingsStore = create<SettingsState>()(
               : { ...state.tts, enabled: true, provider: "atlas", baseUrl: ATLAS_BASE_URL, model: "", voice: "" },
           };
         }),
-      applyHuabotOneKey: (apiKey) => set((state) => {
+      applyHuabotOneKey: (apiKey, keyId) => set((state) => {
         const key = apiKey.trim();
         return {
           huabotBackup: undefined,
+          selectedHuabotKeyId: keyId,
           providers: { huabot: { enabled: true, apiKey: key, baseUrl: "https://huabot.com" } },
           llm: { provider: "Huabot", baseUrl: "https://huabot.com/v1", apiKey: key, model: state.llm.provider === "Huabot" ? state.llm.model : "deepseek-v4-pro", visionModel: state.llm.provider === "Huabot" ? state.llm.visionModel : "deepseek-v4-pro" },
           tts: { ...state.tts, enabled: true, provider: "openai", baseUrl: "https://huabot.com/v1", apiKey: key, model: "qwen3-tts-flash" },
@@ -308,6 +312,7 @@ export const useSettingsStore = create<SettingsState>()(
           llm: { ...state.llm, apiKey: "" },
           tts: { ...state.tts, apiKey: "" },
           huabotBackup: undefined,
+          selectedHuabotKeyId: "",
         };
       }),
     }),

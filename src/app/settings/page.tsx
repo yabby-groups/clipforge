@@ -146,6 +146,7 @@ export default function SettingsPage() {
     defaultAspectRatio,
     defaultImageModel,
     defaultVideoModel,
+    selectedHuabotKeyId,
     customModels,
     setProvider,
     setLLM,
@@ -163,7 +164,7 @@ export default function SettingsPage() {
   const [huabotError, setHuabotError] = useState("");
   const [huabotProfile, setHuabotProfile] = useState<{ nick_name?: string; name?: string } | null>(null);
   const [huabotKeys, setHuabotKeys] = useState<Array<{ id: number; name: string; masked: string }>>([]);
-  const [selectedHuabotKey, setSelectedHuabotKey] = useState("");
+  const selectedHuabotKeyDetails = huabotKeys.find((key) => String(key.id) === selectedHuabotKeyId);
   const refreshHuabot = async (): Promise<boolean> => {
     const response = await fetch("/api/auth/huabot/status", { cache: "no-store" });
     const data = await response.json();
@@ -184,10 +185,10 @@ export default function SettingsPage() {
     } catch (error) { setHuabotState("error"); setHuabotError(error instanceof Error ? error.message : "无法启动登录"); }
   };
   const selectHuabotKey = async (id: number) => {
-    try { const response = await fetch("/api/auth/huabot/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); applyHuabotOneKey(data.apiKey); setSelectedHuabotKey(String(id)); setHuabotError(""); }
+    try { const response = await fetch("/api/auth/huabot/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); applyHuabotOneKey(data.apiKey, String(id)); setHuabotError(""); }
     catch (error) { setHuabotError(error instanceof Error ? error.message : "无法导入 Key"); }
   };
-  const logoutHuabot = async () => { await fetch("/api/auth/huabot/logout", { method: "POST" }); disconnectHuabot(); setHuabotState("idle"); setHuabotCode(""); setHuabotKeys([]); setSelectedHuabotKey(""); setHuabotProfile(null); };
+  const logoutHuabot = async () => { await fetch("/api/auth/huabot/logout", { method: "POST" }); disconnectHuabot(); setHuabotState("idle"); setHuabotCode(""); setHuabotKeys([]); setHuabotProfile(null); };
 
   // TTS preview playback state
   const [ttsTestStatus, setTtsTestStatus] = useState<"idle" | "testing" | "error">("idle");
@@ -354,7 +355,7 @@ export default function SettingsPage() {
           <p className="text-xs text-muted-foreground mb-3">登录后选择你的 Huabot Key，自动配置脚本、生图、生视频与配音。</p>
           {huabotState === "authorized" ? <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-500"><LuCheck className="w-4 h-4" /><span>已登录{huabotProfile?.nick_name || huabotProfile?.name ? `：${huabotProfile.nick_name || huabotProfile.name}` : ""}</span><Button size="sm" variant="outline" onClick={logoutHuabot}><LuLogOut />登出</Button></div>
-            {huabotKeys.length > 0 && <div className="max-w-md"><Label className="mb-1.5 block text-xs text-muted-foreground">API Key</Label><Select value={selectedHuabotKey} onValueChange={(value) => { if (value) void selectHuabotKey(Number(value)); }}><SelectTrigger><SelectValue placeholder="选择 API Key" /></SelectTrigger><SelectContent>{huabotKeys.map((key) => <SelectItem key={key.id} value={String(key.id)}>{key.name}{key.masked ? ` (${key.masked})` : ""}</SelectItem>)}</SelectContent></Select></div>}
+            {huabotKeys.length > 0 && <div className="max-w-md"><Label className="mb-1.5 block text-xs text-muted-foreground">API Key</Label><Select value={selectedHuabotKeyId} onValueChange={(value) => { if (value) void selectHuabotKey(Number(value)); }}><SelectTrigger className="w-full"><SelectValue placeholder="选择 API Key">{() => selectedHuabotKeyDetails ? `${selectedHuabotKeyDetails.name}${selectedHuabotKeyDetails.masked ? ` (${selectedHuabotKeyDetails.masked})` : ""}` : "选择 API Key"}</SelectValue></SelectTrigger><SelectContent>{huabotKeys.map((key) => <SelectItem key={key.id} value={String(key.id)}>{key.name}{key.masked ? ` (${key.masked})` : ""}</SelectItem>)}</SelectContent></Select></div>}
           </div> : <div className="flex flex-wrap items-center gap-3">
             <Button onClick={() => void startHuabotLogin()} disabled={huabotState === "starting" || huabotState === "pending"} className="brand-gradient text-white border-0"><LuLogIn />{huabotState === "starting" ? "正在打开…" : huabotState === "pending" ? "等待授权…" : "登录 Huabot"}</Button>
             {huabotCode && <span className="font-mono text-sm">授权码：{huabotCode}</span>}
