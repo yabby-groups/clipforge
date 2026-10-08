@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchHuabotKeys } from "@/lib/huabot-oauth";
+import { fetchHuabotKeys, refreshTokenIsInvalid } from "@/lib/huabot-oauth";
 
 describe("fetchHuabotKeys", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -43,5 +43,14 @@ describe("fetchHuabotKeys", () => {
 
     await expect(fetchHuabotKeys("access-token")).rejects.toThrow("Huabot did not return a usable Key");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("refreshTokenIsInvalid", () => {
+  it("only discards the stored session when OAuth explicitly rejects the refresh token", () => {
+    expect(refreshTokenIsInvalid(400, "invalid_grant")).toBe(true);
+    expect(refreshTokenIsInvalid(400, "invalid_client")).toBe(false);
+    expect(refreshTokenIsInvalid(401, "invalid_token")).toBe(false);
+    expect(refreshTokenIsInvalid(503, "temporarily_unavailable")).toBe(false);
   });
 });

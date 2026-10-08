@@ -61,6 +61,12 @@ async function form(path: string, values: Record<string, string>) {
   return { response, json };
 }
 
+export function refreshTokenIsInvalid(status: number, error: unknown): boolean {
+  // Network and upstream failures are recoverable. OAuth reserves invalid_grant
+  // for a refresh token that has actually expired, been revoked, or rotated away.
+  return status === 400 && error === "invalid_grant";
+}
+
 export async function beginDeviceAuthorization(id: string): Promise<DeviceGrant> {
   const { response, json } = await form("/oauth/device/code", { client_id: HUABOT_CLIENT_ID, scope: HUABOT_SCOPES, completion_action: "close" });
   if (!response.ok || typeof json.device_code !== "string" || typeof json.verification_uri_complete !== "string") throw new Error(String(json.error_description || "Unable to start Huabot login"));
@@ -72,7 +78,13 @@ export async function beginDeviceAuthorization(id: string): Promise<DeviceGrant>
 export async function refreshIfNeeded(id: string, session: OAuthSession): Promise<OAuthSession> {
   if (!session.tokens || session.tokens.accessExpiresAt > Date.now() + 60_000) return session;
   const { response, json } = await form("/oauth/token", { grant_type: "refresh_token", client_id: HUABOT_CLIENT_ID, refresh_token: session.tokens.refreshToken });
-  if (!response.ok || typeof json.access_token !== "string" || typeof json.refresh_token !== "string") { await removeSession(id); throw new Error("Huabot login expired. Please sign in again."); }
+  if (!response.ok || typeof json.access_token !== "string" || typeof json.refresh_token !== "string") {
+    if (refreshTokenIsInvalid(response.status, json.error)) {
+      await removeSession(id);
+      throw new Error("Huabot login expired. Please sign in again.");
+    }
+    throw new Error(String(json.error_description || "Unable to refresh Huabot login. Please try again."));
+  }
   session.tokens = { accessToken: json.access_token, refreshToken: json.refresh_token, accessExpiresAt: Date.now() + (Number(json.expires_in) || 3600) * 1000 };
   await saveSession(id, session);
   return session;
