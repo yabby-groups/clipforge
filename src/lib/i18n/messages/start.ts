@@ -77,7 +77,7 @@ export const start: NamespaceMessages = {
     profileModelWarning: "当前方案还缺少生图或视频模型，开始时可能无法完成 AI 画面。",
     profileConfigure: "去补齐配置",
     // 未配 Key 提示
-    keyboxText: "还没配 Key？脚本/画面需要先接一个 AI 平台。推荐 Atlas Cloud——一个 Key 搞定脚本+图+视频+配音。",
+    keyboxText: "",
     keyboxCta: "去配置",
     // Atlas 一键接入（落地页内联，免跳设置）
     atlasBadge: "一个 Key",
@@ -237,7 +237,7 @@ export const start: NamespaceMessages = {
     profileModelWarning: "This strategy still needs an image or video model before it can finish AI visuals.",
     profileConfigure: "Complete setup",
     // 未配 Key 提示
-    keyboxText: "No key yet? Scripts and visuals need an AI platform first. We recommend Atlas Cloud — one key covers script + image + video + voiceover.",
+    keyboxText: "",
     keyboxCta: "Configure",
     // Atlas 一键接入（落地页内联，免跳设置）
     atlasBadge: "One key",

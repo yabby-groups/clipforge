@@ -1,6 +1,6 @@
 import { join, dirname } from "path";
 import { getDataDir } from "@/lib/paths";
-import { ffmpegBin } from "@/lib/ffmpeg-path";
+import { ffmpegBin, lacksFilterComplexScript } from "@/lib/ffmpeg-path";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { existsSync } from "fs";
 import { TRANSITIONS, type TransitionMode } from "./transitions";
@@ -452,7 +452,7 @@ interface ComposeGraph {
 
 // Assemble the ffmpeg composition graph (inputs / filtergraph / stream labels / duration) once;
 // buildComposeCommand renders it as a shell string (tests/debug) and buildComposeInvocation renders it
-// as shell-free argv + a -filter_complex_script payload (actual execution).
+// as shell-free argv (actual execution).
 function assembleComposeGraph(config: ComposeConfig): ComposeGraph {
   // empty clips would cause the subsequent -map "[v0]" to reference a stream that was never created, producing a cryptic ffmpeg error; fail early with a readable message instead
   if (!config.clips || config.clips.length === 0) {
@@ -859,11 +859,11 @@ export function buildComposeCommand(config: ComposeConfig): string {
   return cmd;
 }
 
-/** Shell-free ffmpeg invocation: raw argv + a filtergraph in ffmpeg-direct form (fed via -filter_complex_script). */
+/** Shell-free ffmpeg invocation: raw argv + a filtergraph in ffmpeg-direct form. */
 export interface ComposeInvocation {
   /** ["-y", ...inputs] — raw paths, no shell quoting */
   inputArgs: string[];
-  /** filtergraph in ffmpeg-direct form (shell backslash-halving already applied); write to a file for -filter_complex_script */
+  /** filtergraph in ffmpeg-direct form (shell backslash-halving already applied) */
   filterComplex: string;
   /** maps + encode + metadata + -t + output path (the filter flag is spliced in by the caller) */
   outputArgs: string[];
@@ -871,11 +871,8 @@ export interface ComposeInvocation {
 }
 
 /**
- * Build a shell-free ffmpeg invocation. The giant, newline-laden filtergraph is returned separately so the
- * caller can write it to a file and pass it via -filter_complex_script; together with execFile (no shell)
- * this sidesteps cmd.exe's 8191-char command-line cap, its embedded-newline breakage, and its backslash
- * mangling of Windows paths — all of which made every compose fail on Windows (issue #13) while working on
- * macOS/Linux.
+ * Build a shell-free ffmpeg invocation. The caller prefers a script file where supported,
+ * then uses FFmpeg 9's /option file syntax for the same graph.
  */
 export function buildComposeInvocation(config: ComposeConfig): ComposeInvocation {
   const g = assembleComposeGraph(config);
@@ -930,12 +927,8 @@ export async function composeVideo(config: ComposeConfig): Promise<string> {
 
   const inv = buildComposeInvocation(config);
 
-  // Write the (large, newline-laden) filtergraph to a script file and pass it via -filter_complex_script.
-  // Combined with execFile (no shell) this is the crux of the Windows fix (issue #13): a real 6-shot compose
-  // command is ~12k chars with ~23 embedded newlines, and running it through cmd.exe (as child_process.exec
-  // does on Windows) blew past its 8191-char command-line cap and choked on the newlines, so every final
-  // compose failed on Windows while working on macOS/Linux. execFile bypasses the shell entirely (no length
-  // cap, no quoting/backslash issues) and the script file keeps the argv small regardless of project size.
+  // Keep the script form for older FFmpeg and long Windows graphs. FFmpeg 9 no longer
+  // accepts this option, so the explicit fallback below uses its -/filter_complex file syntax.
   const filterFile = join(outputDir, `filter_${Date.now()}.txt`);
   await writeFile(filterFile, inv.filterComplex, "utf8");
   const args = [...inv.inputArgs, "-filter_complex_script", filterFile, ...inv.outputArgs];
@@ -948,9 +941,17 @@ export async function composeVideo(config: ComposeConfig): Promise<string> {
     // Only the expensive ffmpeg run goes through the gate (cheap setup above runs unguarded);
     // execFile's timeout starts inside the limited fn, so time spent queueing never counts against it.
     // apply timeout (sends SIGTERM if exceeded); disk-full / timeout errors are mapped to readable messages
-    await withComposeSlot(() =>
-      execFileAsync(ffmpegBin(), args, { maxBuffer: 50 * 1024 * 1024, timeout: COMPOSE_TIMEOUT_MS })
-    );
+    await withComposeSlot(async () => {
+      try {
+        await execFileAsync(ffmpegBin(), args, { maxBuffer: 50 * 1024 * 1024, timeout: COMPOSE_TIMEOUT_MS });
+      } catch (error) {
+        if (!lacksFilterComplexScript(error as { stderr?: string; message?: string })) throw error;
+        await execFileAsync(ffmpegBin(), [...inv.inputArgs, "-/filter_complex", filterFile, ...inv.outputArgs], {
+          maxBuffer: 50 * 1024 * 1024,
+          timeout: COMPOSE_TIMEOUT_MS,
+        });
+      }
+    });
   } catch (e) {
     const friendly = composeErrorMessage(e as { killed?: boolean; signal?: string; stderr?: string; message?: string });
     if (friendly) throw new Error(friendly);

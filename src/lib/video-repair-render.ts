@@ -3,7 +3,7 @@ import { mkdir, rm, writeFile } from "fs/promises";
 import { dirname } from "path";
 import { promisify } from "util";
 import { buildAigcMetadataArgv } from "@/lib/compliance-metadata";
-import { ffmpegBin } from "@/lib/ffmpeg-path";
+import { ffmpegBin, lacksFilterComplexScript } from "@/lib/ffmpeg-path";
 import { probeMedia } from "@/lib/media-probe";
 import { validateMediaFile } from "@/lib/media-validate";
 import type { RepairWindow } from "@/lib/video-repair-plan";
@@ -103,10 +103,23 @@ export async function renderVideoRepair(input: {
   const filterFile = `${input.outputPath}.filter.txt`;
   await writeFile(filterFile, invocation.filterComplex, "utf8");
   try {
-    await withComposeSlot(() => execFileAsync(ffmpegBin(), invocation.args, {
-      timeout: COMPOSE_TIMEOUT_MS,
-      maxBuffer: 50 * 1024 * 1024,
-    }));
+    await withComposeSlot(async () => {
+      try {
+        await execFileAsync(ffmpegBin(), invocation.args, {
+          timeout: COMPOSE_TIMEOUT_MS,
+          maxBuffer: 50 * 1024 * 1024,
+        });
+      } catch (error) {
+        if (!lacksFilterComplexScript(error as { stderr?: string; message?: string })) throw error;
+        const filterArgIndex = invocation.args.indexOf("-filter_complex_script");
+        const fallbackArgs = [
+          ...invocation.args.slice(0, filterArgIndex),
+          "-/filter_complex", filterFile,
+          ...invocation.args.slice(filterArgIndex + 2),
+        ];
+        await execFileAsync(ffmpegBin(), fallbackArgs, { timeout: COMPOSE_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024 });
+      }
+    });
     if (!(await validateMediaFile(input.outputPath, "video"))) throw new Error("修复成片校验失败，原镜头保持不变");
     return input.outputPath;
   } catch (error) {

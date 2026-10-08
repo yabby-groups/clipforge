@@ -19,3 +19,9 @@ export function ffmpegBin(): string {
 export function ffprobeBin(): string {
   return process.env.FFPROBE_PATH || "ffprobe";
 }
+
+/** FFmpeg 9 removed this formerly supported option; callers can use its /option file syntax. */
+export function lacksFilterComplexScript(error: { stderr?: string; message?: string }): boolean {
+  const output = `${error.stderr || ""}\n${error.message || ""}`;
+  return /Unrecognized option ['"]filter_complex_script['"][\s\S]*Option not found/i.test(output);
+}

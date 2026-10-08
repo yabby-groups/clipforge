@@ -488,9 +488,8 @@ describe("buildComposeCommand", () => {
   });
 });
 
-// buildComposeInvocation is the shell-free form composeVideo actually runs (execFile + -filter_complex_script).
-// It exists specifically to fix the Windows compose failure (issue #13): a real command is ~12k chars with
-// embedded newlines, which overruns cmd.exe's 8191-char limit and breaks on newlines when run via a shell.
+// buildComposeInvocation is the shell-free form composeVideo actually runs. It can be supplied to either
+// -filter_complex_script or FFmpeg 9's -/filter_complex file-argument fallback.
 describe("buildComposeInvocation（shell-free 执行形态：修 Windows 合成必挂 issue #13）", () => {
   const cfg: ComposeConfig = {
     projectId: "p1",

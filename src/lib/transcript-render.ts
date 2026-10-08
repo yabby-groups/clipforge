@@ -18,6 +18,7 @@ import {
 } from "@/lib/video-composer/composer";
 import { buildKaraokeAss } from "@/lib/video-composer/karaoke";
 import { validateMediaFile } from "@/lib/media-validate";
+import { lacksFilterComplexScript } from "@/lib/ffmpeg-path";
 
 
 export const TRANSCRIPT_RENDER_TIMEOUT_MS = 15 * 60 * 1000;
@@ -156,7 +157,14 @@ export async function renderTranscriptEdit(input: RenderTranscriptEditInput): Pr
     await withComposeSlot(() => {
       input.signal?.throwIfAborted();
       input.onStart?.();
-      return runTranscriptFfmpeg(args, { duration, timeoutMs: TRANSCRIPT_RENDER_TIMEOUT_MS, signal: input.signal, onProgress: input.onProgress });
+      return runTranscriptFfmpeg(args, { duration, timeoutMs: TRANSCRIPT_RENDER_TIMEOUT_MS, signal: input.signal, onProgress: input.onProgress })
+        .catch((error: { stderr?: string; message?: string }) => {
+          if (!lacksFilterComplexScript(error)) throw error;
+          return runTranscriptFfmpeg(
+            [...invocation.inputArgs, "-/filter_complex", filterPath, ...invocation.outputArgs],
+            { duration, timeoutMs: TRANSCRIPT_RENDER_TIMEOUT_MS, signal: input.signal, onProgress: input.onProgress },
+          );
+        });
     }, input.signal);
     input.signal?.throwIfAborted();
     if (!(await validateMediaFile(input.outputPath, "video"))) throw new Error("剪辑结果校验失败，请重试");
