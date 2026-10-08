@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errText } from "@/lib/api-error";
 import { listModels } from "@/lib/llm-models";
+import { fetchHuabotCatalog, huabotTextAliases } from "@/lib/providers/huabot";
 
 /**
  * List the models an OpenAI-compatible endpoint exposes, so Settings can offer them instead of making
@@ -16,7 +17,10 @@ export async function POST(req: NextRequest) {
     if (!baseUrl) {
       return NextResponse.json({ ok: false, error: errText(req, "缺少 baseUrl", "Missing baseUrl") }, { status: 400 });
     }
-    const models = await listModels(String(baseUrl), String(apiKey || ""));
+    const isHuabot = /^https?:\/\/huabot\.com(?:\/v1)?\/?$/i.test(String(baseUrl));
+    const models = isHuabot
+      ? huabotTextAliases(await fetchHuabotCatalog("https://huabot.com", String(apiKey || "")))
+      : await listModels(String(baseUrl), String(apiKey || ""));
     if (models.length === 0) {
       return NextResponse.json({
         ok: false,

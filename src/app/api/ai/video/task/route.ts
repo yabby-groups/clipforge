@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
   const { provider: providerName, apiKey, baseUrl, taskId, wait } = body;
 
-  if (!providerName || !taskId) {
+  if (providerName !== "huabot" || !taskId) {
     return apiError(req, "缺少必要参数（provider / taskId）", "Missing required parameters (provider / taskId)");
   }
   if (!apiKey) {

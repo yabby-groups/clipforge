@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { provider: providerName, model, prompt, imageUrl, imageUrls, mode, apiKey, baseUrl, options } = body;
 
-  if (!providerName || !model || !prompt) {
+  if (providerName !== "huabot" || !model || !prompt) {
     return apiError(req, "缺少必要参数", "Missing required parameters");
   }
 

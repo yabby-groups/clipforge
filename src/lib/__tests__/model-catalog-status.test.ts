@@ -8,16 +8,16 @@ vi.mock("@/lib/providers", () => ({ createProvider: ({ name }: { name: string })
 import { POST } from "@/app/api/ai/models/route";
 describe("per-provider catalog status", () => {
   it("preserves successful results and reports redacted partial failure", async () => {
-    const response = await POST(new NextRequest("http://localhost/api/ai/models", { method: "POST", body: JSON.stringify({ providers: [{ name: "ready" }, { name: "failed" }, { name: "empty" }], mediaType: "image" }) }));
+    const response = await POST(new NextRequest("http://localhost/api/ai/models", { method: "POST", body: JSON.stringify({ providers: [{ name: "huabot" }], mediaType: "image" }) }));
     const result = await response.json();
     expect(result.models).toHaveLength(1);
-    expect(result.providers.map((provider: { status: string }) => provider.status)).toEqual(["ready", "error", "empty"]);
+    expect(result.providers.map((provider: { status: string }) => provider.status)).toEqual(["ready"]);
     expect(JSON.stringify(result)).not.toMatch(/secret-api-key|private.example/);
     expect(result.providers.every((provider: { checkedAt: string }) => !!provider.checkedAt)).toBe(true);
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
   it("rejects malformed provider input", async () => {
-    const response = await POST(new NextRequest("http://localhost/api/ai/models", { method: "POST", body: JSON.stringify({ providers: [null] }) }));
+    const response = await POST(new NextRequest("http://localhost/api/ai/models", { method: "POST", body: JSON.stringify({ providers: [{ name: "atlas-cloud" }] }) }));
     expect(response.status).toBe(400);
   });
 });

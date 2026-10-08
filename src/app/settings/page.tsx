@@ -15,21 +15,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { LuUpload, LuPalette, LuZap, LuCheck, LuTriangleAlert } from "react-icons/lu";
-import { ATLAS_KEYS_URL } from "@/lib/atlas-onekey";
+import { LuUpload, LuPalette, LuZap, LuCheck, LuTriangleAlert, LuLogIn, LuLogOut } from "react-icons/lu";
 import { useT } from "@/lib/i18n";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useBrandStore } from "@/lib/stores/brand-store";
-import {
-  TTS_PROVIDERS,
-  OPENAI_TTS_PRESETS,
-  getTTSProviderMeta,
-  resolveTTSConfig,
-  isPaidTTSReady,
-  type TTSProvider,
-} from "@/lib/tts-presets";
+import { resolveTTSConfig, isPaidTTSReady } from "@/lib/tts-presets";
 import { mergeCustomModels } from "@/lib/gen-params";
-import { LLM_PRESETS } from "@/lib/llm-presets";
 import { ModelPicker } from "@/components/settings/model-picker";
 import { GenerationSettings } from "@/components/generation-settings";
 import { PresenterManager } from "@/components/presenter-manager";
@@ -59,117 +50,8 @@ const SETTINGS_SECTIONS = [
 ];
 const SETTINGS_TABS: string[] = SETTINGS_SECTIONS.map((s) => s.id);
 
-// AI platform configuration list
-const AI_PROVIDERS = [
-  {
-    key: "atlas-cloud",
-    name: "Atlas Cloud",
-    descKey: "providerAtlasDesc",
-    tipKey: "providerAtlasTip",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-        <path d="M2 12h20" />
-      </svg>
-    ),
-    iconBg: "from-blue-500 to-cyan-500",
-  },
-  {
-    key: "fal-ai",
-    name: "fal.ai",
-    descKey: "providerFalDesc",
-    tipKey: "providerFalTip",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-      </svg>
-    ),
-    iconBg: "from-purple-500 to-pink-500",
-  },
-  {
-    key: "replicate",
-    name: "Replicate",
-    descKey: "providerReplicateDesc",
-    tipKey: "providerReplicateTip",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="4 17 10 11 4 5" />
-        <line x1="12" y1="19" x2="20" y2="19" />
-      </svg>
-    ),
-    iconBg: "from-slate-500 to-gray-700",
-  },
-  {
-    key: "volcengine",
-    name: "火山引擎",
-    descKey: "providerVolcengineDesc",
-    tipKey: "providerVolcengineTip",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-      </svg>
-    ),
-    iconBg: "from-orange-500 to-red-500",
-  },
-  {
-    key: "alibaba",
-    name: "阿里百炼",
-    descKey: "providerAlibabaDesc",
-    tipKey: "providerAlibabaTip",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-        <line x1="12" y1="22.08" x2="12" y2="12" />
-      </svg>
-    ),
-    iconBg: "from-amber-500 to-orange-500",
-  },
-  {
-    key: "siliconflow",
-    name: "硅基流动",
-    descKey: "providerSiliconflowDesc",
-    tipKey: "providerSiliconflowTip",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="4" y="4" width="16" height="16" rx="2" />
-        <rect x="9" y="9" width="6" height="6" />
-        <path d="M15 2v2" />
-        <path d="M15 20v2" />
-        <path d="M2 15h2" />
-        <path d="M2 9h2" />
-        <path d="M20 15h2" />
-        <path d="M20 9h2" />
-        <path d="M9 2v2" />
-        <path d="M9 20v2" />
-      </svg>
-    ),
-    iconBg: "from-emerald-500 to-teal-500",
-  },
-  {
-    key: "openai",
-    name: "OpenAI",
-    descKey: "providerOpenaiDesc",
-    tipKey: "providerOpenaiTip",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2a4.5 4.5 0 0 1 4.27 3.08A4.5 4.5 0 0 1 19.5 12a4.5 4.5 0 0 1-3.23 6.92A4.5 4.5 0 0 1 12 22a4.5 4.5 0 0 1-4.27-3.08A4.5 4.5 0 0 1 4.5 12a4.5 4.5 0 0 1 3.23-6.92A4.5 4.5 0 0 1 12 2z" />
-        <path d="M12 8.5v7M8.5 10.25l7 3.5M15.5 10.25l-7 3.5" />
-      </svg>
-    ),
-    iconBg: "from-teal-600 to-green-700",
-  },
-];
-
-// Map Chinese vendor names by key to i18n display names (English users would otherwise see hard-coded Chinese like "火山引擎/阿里百炼/硅基流动").
-// Only overrides vendors with Chinese names; others (Atlas Cloud/OpenAI, etc.) already use English brand names and use platform.name directly.
-// Note: platform.name is still used as the identity for enabledNames custom model filtering, so we only change the display, not name.
-const PROVIDER_NAME_KEYS: Record<string, string> = {
-  volcengine: "providerVolcengineName",
-  alibaba: "providerAlibabaName",
-  siliconflow: "providerSiliconflowName",
-};
+const AI_PROVIDERS = [{ key: "huabot", name: "Huabot", descKey: "providerOpenaiDesc", tipKey: "providerOpenaiTip", icon: <LuZap className="h-5 w-5" />, iconBg: "from-cyan-500 to-blue-600" }];
+const PROVIDER_NAME_KEYS: Record<string, string> = {};
 
 // password input field with show/hide toggle
 function PasswordInput({
@@ -267,17 +149,40 @@ export default function SettingsPage() {
     setDefaultAspectRatio,
     setDefaultImageModel,
     setDefaultVideoModel,
-    applyAtlasOneKey,
+    applyHuabotOneKey,
+    disconnectHuabot,
   } = useSettingsStore();
 
-  // one-click Atlas onboarding: a single Key auto-configures LLM/image-gen/video-gen/TTS
-  const [atlasOneKey, setAtlasOneKey] = useState("");
-  const [atlasApplied, setAtlasApplied] = useState(false);
-  const applyOneKey = () => {
-    if (!atlasOneKey.trim()) return;
-    applyAtlasOneKey(atlasOneKey.trim());
-    setAtlasApplied(true);
+  const [huabotState, setHuabotState] = useState<"idle" | "starting" | "pending" | "authorized" | "error">("idle");
+  const [huabotCode, setHuabotCode] = useState("");
+  const [huabotError, setHuabotError] = useState("");
+  const [huabotProfile, setHuabotProfile] = useState<{ nick_name?: string; name?: string } | null>(null);
+  const [huabotKeys, setHuabotKeys] = useState<Array<{ id: number; name: string; masked: string }>>([]);
+  const [selectedHuabotKey, setSelectedHuabotKey] = useState("");
+  const refreshHuabot = async (): Promise<boolean> => {
+    const response = await fetch("/api/auth/huabot/status", { cache: "no-store" });
+    const data = await response.json();
+    if (data.state === "authorized") { setHuabotState("authorized"); setHuabotProfile(data.profile ?? null); setHuabotKeys(Array.isArray(data.keys) ? data.keys : []); return true; }
+    if (data.state === "pending") { setHuabotState("pending"); return false; }
+    if (data.state === "signed_out") { setHuabotState("idle"); return true; }
+    setHuabotState("error"); setHuabotError(data.message || "登录失败，请重试"); return true;
   };
+  useEffect(() => { void refreshHuabot(); }, []);
+  const startHuabotLogin = async () => {
+    setHuabotState("starting"); setHuabotError("");
+    try {
+      const response = await fetch("/api/auth/huabot/device", { method: "POST" }); const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setHuabotCode(data.userCode || ""); setHuabotState("pending"); window.open(data.verificationUriComplete, "_blank", "noopener,noreferrer");
+      const poll = async () => { const complete = await refreshHuabot(); if (!complete) window.setTimeout(() => void poll(), Math.max(3, Number(data.interval) || 3) * 1000); };
+      window.setTimeout(() => void poll(), Math.max(3, Number(data.interval) || 3) * 1000);
+    } catch (error) { setHuabotState("error"); setHuabotError(error instanceof Error ? error.message : "无法启动登录"); }
+  };
+  const selectHuabotKey = async (id: number) => {
+    try { const response = await fetch("/api/auth/huabot/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); applyHuabotOneKey(data.apiKey); setSelectedHuabotKey(String(id)); setHuabotError(""); }
+    catch (error) { setHuabotError(error instanceof Error ? error.message : "无法导入 Key"); }
+  };
+  const logoutHuabot = async () => { await fetch("/api/auth/huabot/logout", { method: "POST" }); disconnectHuabot(); setHuabotState("idle"); setHuabotCode(""); setHuabotKeys([]); setSelectedHuabotKey(""); setHuabotProfile(null); };
 
   // TTS preview playback state
   const [ttsTestStatus, setTtsTestStatus] = useState<"idle" | "testing" | "error">("idle");
@@ -318,13 +223,7 @@ export default function SettingsPage() {
     }
   };
 
-  // TTS provider metadata / ready state / reset model, voice, and baseUrl to provider defaults when switching providers
-  const ttsMeta = getTTSProviderMeta(tts.provider);
   const ttsReady = isPaidTTSReady(tts, providers);
-  const onChangeTTSProvider = (provider: TTSProvider) => {
-    const meta = getTTSProviderMeta(provider);
-    setTTS({ ...tts, provider, baseUrl: meta.baseUrl, model: meta.defaultModel, voice: meta.defaultVoice });
-  };
 
   // save feedback state
 
@@ -439,36 +338,21 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* beginner one-click setup: a single Atlas Key auto-configures LLM/image-gen/video-gen/TTS, skipping manual item-by-item setup */}
+        {/* Huabot OAuth onboarding keeps device codes and OAuth tokens on the server. */}
         <div className="mb-8 rounded-2xl border border-primary/30 bg-primary/5 p-5">
           <div className="flex items-center gap-2 mb-1">
             <LuZap className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold text-sm">{t("oneKeyTitle")}</h2>
+            <h2 className="font-semibold text-sm">Huabot 一键登录</h2>
           </div>
-          <p className="text-xs text-muted-foreground mb-3">{t("oneKeyDesc")}</p>
-          {atlasApplied ? (
-            <div className="flex items-center gap-2 text-sm text-emerald-400">
-              <LuCheck className="w-4 h-4 shrink-0" />
-              <span>{t("oneKeyDone")}</span>
-            </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Input
-                type="password"
-                value={atlasOneKey}
-                onChange={(e) => setAtlasOneKey(e.target.value)}
-                placeholder={t("oneKeyPlaceholder")}
-                className="flex-1"
-              />
-              <Button onClick={applyOneKey} disabled={!atlasOneKey.trim()} className="brand-gradient text-white border-0 shrink-0">
-                <LuZap className="w-4 h-4 mr-1.5" />
-                {t("oneKeyCta")}
-              </Button>
-            </div>
-          )}
-          <a href={ATLAS_KEYS_URL} target="_blank" rel="noreferrer" className="inline-block mt-2 text-xs text-primary hover:underline">
-            {t("oneKeyGetKey")}
-          </a>
+          <p className="text-xs text-muted-foreground mb-3">登录后选择你的 Huabot Key，自动配置脚本、生图、生视频与配音。</p>
+          {huabotState === "authorized" ? <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-500"><LuCheck className="w-4 h-4" /><span>已登录{huabotProfile?.nick_name || huabotProfile?.name ? `：${huabotProfile.nick_name || huabotProfile.name}` : ""}</span><Button size="sm" variant="outline" onClick={logoutHuabot}><LuLogOut />登出</Button></div>
+            {huabotKeys.length > 0 && <div className="max-w-md"><Label className="mb-1.5 block text-xs text-muted-foreground">API Key</Label><Select value={selectedHuabotKey} onValueChange={(value) => { if (value) void selectHuabotKey(Number(value)); }}><SelectTrigger><SelectValue placeholder="选择 API Key" /></SelectTrigger><SelectContent>{huabotKeys.map((key) => <SelectItem key={key.id} value={String(key.id)}>{key.name}{key.masked ? ` (${key.masked})` : ""}</SelectItem>)}</SelectContent></Select></div>}
+          </div> : <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => void startHuabotLogin()} disabled={huabotState === "starting" || huabotState === "pending"} className="brand-gradient text-white border-0"><LuLogIn />{huabotState === "starting" ? "正在打开…" : huabotState === "pending" ? "等待授权…" : "登录 Huabot"}</Button>
+            {huabotCode && <span className="font-mono text-sm">授权码：{huabotCode}</span>}
+          </div>}
+          {huabotError && <p className="mt-2 text-xs text-destructive">{huabotError}</p>}
         </div>
 
         {/* tabs */}
@@ -621,66 +505,8 @@ export default function SettingsPage() {
                     <h3 className="font-semibold text-sm">{t("llmProvider")}</h3>
                   </div>
 
-                  {/* quick presets */}
-                  <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-border/50">
-                    <p className="text-xs text-muted-foreground mb-2">{t("llmPresetHint")}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {LLM_PRESETS.map((preset) => (
-                        <button
-                          key={preset.label}
-                          onClick={() => setLLM({ ...llm, baseUrl: preset.baseUrl, model: preset.model, visionModel: preset.model, ...(preset.apiKey ? { apiKey: preset.apiKey } : {}) })}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border border-border/50 bg-background hover:border-primary/40 hover:text-primary transition-colors"
-                        >
-                          {preset.label}
-                          {preset.tipKey && (
-                            <span className="text-[10px] text-muted-foreground/70">({t(preset.tipKey as Parameters<typeof t>[0])})</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   <div className="grid gap-4">
-                    {/* API base URL */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">
-                        {t("llmBaseUrlLabel")}
-                      </Label>
-                      <Input
-                        value={llm.baseUrl}
-                        onChange={(e) =>
-                          setLLM({ ...llm, baseUrl: e.target.value })
-                        }
-                        placeholder="https://api.openai.com/v1"
-                        className="font-mono text-xs"
-                      />
-                    </div>
-
-                    {/* API Key */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">
-                        {t("apiKeyLabel")}
-                      </Label>
-                      <PasswordInput
-                        value={llm.apiKey}
-                        onChange={(apiKey) => setLLM({ ...llm, apiKey })}
-                        placeholder={t("llmApiKeyPlaceholder")}
-                      />
-                      {/* Pollinations 已改为「注册领每日免费额度」，直接把领 Key 的地址摆在输入框下面 */}
-                      {/pollinations\.ai/i.test(llm.baseUrl) && (
-                        <p className="text-xs text-muted-foreground">
-                          {t("pollinationsKeyHint")}{" "}
-                          <a
-                            href="https://enter.pollinations.ai/keys"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-primary underline underline-offset-2"
-                          >
-                            enter.pollinations.ai/keys
-                          </a>
-                        </p>
-                      )}
-                    </div>
+                    <p className="text-xs text-muted-foreground">Huabot API Key 由“平台”页选择。下方仅展示 Huabot 可用 alias 模型。</p>
 
                     {/* model name */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -793,117 +619,11 @@ export default function SettingsPage() {
 
                   {tts.enabled && (
                     <div className="space-y-4">
-                      {/* TTS provider selection */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">{t("ttsProviderLabel")}</Label>
-                        <Select value={tts.provider ?? "openai"} onValueChange={(v) => onChangeTTSProvider((v ?? "openai") as TTSProvider)}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue>
-                              {(value: string) => TTS_PROVIDERS.find((p) => p.value === value)?.label ?? t("ttsProviderFallback")}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {TTS_PROVIDERS.map((p) => (
-                              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {ttsMeta.hint && <p className="text-[11px] text-muted-foreground/80">{ttsMeta.hint}</p>}
+                      <p className="text-xs text-muted-foreground">使用当前 Huabot API Key 与 OpenAI 兼容语音接口。</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{t("ttsModelLabel")}</Label><Input value={tts.model} onChange={(e) => setTTS({ ...tts, provider: "openai", baseUrl: "https://huabot.com/v1", model: e.target.value })} placeholder="qwen3-tts-flash" className="font-mono text-xs" /></div>
+                        <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{t("ttsVoiceLabel")}</Label><Input value={tts.voice} onChange={(e) => setTTS({ ...tts, provider: "openai", baseUrl: "https://huabot.com/v1", voice: e.target.value })} className="font-mono text-xs" /></div>
                       </div>
-
-                      {ttsMeta.value === "openai" ? (
-                        <>
-                          {/* OpenAI-compatible: quick presets + baseUrl + Key + free model/voice */}
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-2">{t("ttsPresetHint")}</p>
-                            <div className="flex flex-wrap gap-2">
-                              {OPENAI_TTS_PRESETS.map((p) => (
-                                <button
-                                  key={p.label}
-                                  onClick={() => setTTS({ ...tts, baseUrl: p.baseUrl, model: p.model, voice: p.voice })}
-                                  className="px-2.5 h-7 rounded-md border border-border/60 bg-muted/20 text-xs hover:border-primary/50 hover:text-primary transition-colors"
-                                >
-                                  {p.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground">{t("ttsBaseUrlLabel")}</Label>
-                            <Input value={tts.baseUrl} onChange={(e) => setTTS({ ...tts, baseUrl: e.target.value })} placeholder="https://api.siliconflow.cn/v1" className="font-mono text-xs" />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground">{t("apiKeyLabel")}</Label>
-                            <PasswordInput value={tts.apiKey} onChange={(apiKey) => setTTS({ ...tts, apiKey })} placeholder={t("ttsApiKeyPlaceholder")} />
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">{t("ttsModelLabel")}</Label>
-                              <Input value={tts.model} onChange={(e) => setTTS({ ...tts, model: e.target.value })} placeholder="tts-1" className="font-mono text-xs" />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">{t("ttsVoiceLabel")}</Label>
-                              <Input value={tts.voice} onChange={(e) => setTTS({ ...tts, voice: e.target.value })} placeholder="alloy" className="font-mono text-xs" />
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          {/* Atlas / MiniMax / fal: Key (reused or custom) + optional GroupId/baseUrl + model/voice dropdowns */}
-                          {ttsMeta.keySource === "tts" ? (
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">{t("apiKeyLabel")}</Label>
-                              <PasswordInput value={tts.apiKey} onChange={(apiKey) => setTTS({ ...tts, apiKey })} placeholder={t("ttsApiKeyPlaceholderShort")} />
-                            </div>
-                          ) : (
-                            <div className="text-xs rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-                              {providers[ttsMeta.keySource]?.apiKey ? (
-                                <span className="text-emerald-500">{t("ttsKeyReused")}</span>
-                              ) : (
-                                <span className="text-amber-500">{t("ttsKeyMissing")}</span>
-                              )}
-                            </div>
-                          )}
-                          {ttsMeta.editableBaseUrl && (
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">{t("ttsBaseUrlLabel")}</Label>
-                              <Input value={tts.baseUrl} onChange={(e) => setTTS({ ...tts, baseUrl: e.target.value })} placeholder={ttsMeta.baseUrl} className="font-mono text-xs" />
-                            </div>
-                          )}
-                          {ttsMeta.needsGroupId && (
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">{t("ttsGroupIdLabel")}</Label>
-                              <Input value={tts.groupId ?? ""} onChange={(e) => setTTS({ ...tts, groupId: e.target.value })} placeholder={t("ttsGroupIdPlaceholder")} className="font-mono text-xs" />
-                            </div>
-                          )}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {ttsMeta.models.length > 0 && (
-                              <div className="space-y-1.5">
-                                <Label className="text-xs text-muted-foreground">{t("ttsModelLabel")}</Label>
-                                <Select value={tts.model || ttsMeta.defaultModel} onValueChange={(v) => setTTS({ ...tts, model: v ?? ttsMeta.defaultModel })}>
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue>{(value: string) => ttsMeta.models.find((o) => o.value === value)?.label ?? value}</SelectValue>
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {ttsMeta.models.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            )}
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">{t("ttsVoiceLabel")}</Label>
-                              <Select value={tts.voice || ttsMeta.defaultVoice} onValueChange={(v) => setTTS({ ...tts, voice: v ?? ttsMeta.defaultVoice })}>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue>{(value: string) => ttsMeta.voices.find((o) => o.value === value)?.label ?? value}</SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {ttsMeta.voices.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                        </>
-                      )}
 
                       {/* preview playback */}
                       <div className="pt-3 mt-1 border-t border-border/50">

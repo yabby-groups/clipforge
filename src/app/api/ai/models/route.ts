@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   const providers = body?.providers ?? [];
   const mediaType = body?.mediaType;
-  if (!Array.isArray(providers) || providers.length > 16 || (mediaType !== undefined && mediaType !== "image" && mediaType !== "video") || providers.some((p) => !p || typeof p.name !== "string" || !/^[a-z0-9-]{1,64}$/.test(p.name) || (p.apiKey !== undefined && (typeof p.apiKey !== "string" || p.apiKey.length > 4096)) || (p.baseUrl !== undefined && (typeof p.baseUrl !== "string" || p.baseUrl.length > 2048)))) {
+  if (!Array.isArray(providers) || providers.length > 1 || (mediaType !== undefined && mediaType !== "image" && mediaType !== "video") || providers.some((p) => !p || p.name !== "huabot" || (p.apiKey !== undefined && (typeof p.apiKey !== "string" || p.apiKey.length > 4096)) || (p.baseUrl !== undefined && (typeof p.baseUrl !== "string" || p.baseUrl.length > 2048)))) {
     return NextResponse.json({ error: "Invalid catalog request" }, { status: 400 });
   }
   const types: ("image" | "video")[] = mediaType ? [mediaType] : ["image", "video"];

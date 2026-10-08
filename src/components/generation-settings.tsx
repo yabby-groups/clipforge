@@ -23,15 +23,7 @@ import {
   type GenMediaType,
 } from "@/lib/gen-params";
 
-// platforms that support custom model attachment (keys match settings.providers)
-const PROVIDER_OPTIONS: { value: string; label: string }[] = [
-  { value: "atlas-cloud", label: "Atlas Cloud" },
-  { value: "fal-ai", label: "fal.ai" },
-  { value: "replicate", label: "Replicate" },
-  { value: "volcengine", label: "火山引擎" },
-  { value: "alibaba", label: "阿里百炼" },
-  { value: "siliconflow", label: "硅基流动" },
-];
+const PROVIDER_OPTIONS: { value: string; label: string }[] = [{ value: "huabot", label: "Huabot" }];
 
 const labelOf = (opts: { value: string; label: string }[], v: string) =>
   opts.find((o) => o.value === v)?.label ?? v;
@@ -93,7 +85,7 @@ export function GenerationSettings() {
 
   // form state for adding a new custom model
   const [form, setForm] = useState<{ provider: string; modelId: string; name: string; mediaType: GenMediaType; supportsAudio: boolean }>({
-    provider: "fal-ai",
+    provider: "huabot",
     modelId: "",
     name: "",
     mediaType: "image",

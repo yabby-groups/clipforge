@@ -18,12 +18,16 @@ const DEFAULT_BASE: Record<string, string> = {
   alibaba: "https://dashscope.aliyuncs.com/api/v1",
   siliconflow: "https://api.siliconflow.cn/v1",
   openai: "https://api.openai.com/v1",
+  huabot: "https://huabot.com",
 };
 
 type Probe = { url: string; headers: Record<string, string>; authFirst?: boolean; method?: "GET" | "POST"; body?: string };
 
 function buildProbe(name: string, apiKey: string, baseUrl?: string): Probe {
   const base = (baseUrl || DEFAULT_BASE[name] || "").replace(/\/$/, "");
+  if (name === "huabot") {
+    return { url: `${base}/api/token_base/model/list/?size=1&offset=0&enabled=1`, headers: { Authorization: `Bearer ${apiKey}` } };
+  }
   if (name === "fal-ai") {
     // fal 先校验鉴权再解析 request id：到达 404/422 即说明 Key 有效
     return {

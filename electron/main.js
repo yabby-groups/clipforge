@@ -3,7 +3,7 @@
 //  - Data is written to app.getPath('userData')/data (writable), injected into the server via APP_DATA_DIR (standalone cwd is read-only)
 //  - ffmpeg/ffprobe use bundled binaries, injected via FFMPEG_PATH/FFPROBE_PATH (no ffmpeg install required on the user's machine)
 //  - Acquire a free port (not hardcoded to 3000), poll HTTP until ready before loadURL, kill child process on exit
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, shell, safeStorage } = require("electron");
 const { fork } = require("child_process");
 const http = require("http");
 const net = require("net");
@@ -26,6 +26,17 @@ function initLog() {
   } catch {
     logFilePath = "";
   }
+}
+
+function oauthEncryptionKey() {
+  const keyPath = path.join(app.getPath("userData"), "oauth-key.bin");
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return "";
+    if (fs.existsSync(keyPath)) return safeStorage.decryptString(fs.readFileSync(keyPath)).trim();
+    const key = require("crypto").randomBytes(32).toString("base64url");
+    fs.writeFileSync(keyPath, safeStorage.encryptString(key), { mode: 0o600 });
+    return key;
+  } catch { return ""; }
 }
 
 /** Append a line from the main process to the diagnostics log (best-effort). */
@@ -118,6 +129,7 @@ async function startServer() {
 
   const ffmpegPath = resolveBinary(() => require("ffmpeg-static"));
   const ffprobePath = resolveBinary(() => require("@ffprobe-installer/ffprobe").path);
+  const oauthKey = oauthEncryptionKey();
 
   // Route the child's stdout/stderr to the diagnostics log via a real file descriptor rather than "inherit".
   // Critical on Windows: a packaged GUI (windowed) exe has no console, so the inherited stdout/stderr handles are
@@ -144,6 +156,7 @@ async function startServer() {
       APP_MIGRATIONS_DIR: migrationsDir(serverDir),
       ...(ffmpegPath ? { FFMPEG_PATH: ffmpegPath } : {}),
       ...(ffprobePath ? { FFPROBE_PATH: ffprobePath } : {}),
+      ...(oauthKey ? { CLIPFORGE_OAUTH_ENCRYPTION_KEY: oauthKey } : {}),
     },
     stdio: ["ignore", outFd, outFd, "ipc"],
   });
@@ -234,6 +247,10 @@ app.whenReady().then(async () => {
     );
   });
   mainWindow.loadURL(url);
+  mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
+    try { if (new URL(target).hostname === "huabot.com") { void shell.openExternal(target); return { action: "deny" }; } } catch { /* deny */ }
+    return { action: "deny" };
+  });
   mainWindow.on("closed", () => {
     mainWindow = null;
   });

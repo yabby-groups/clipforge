@@ -87,6 +87,7 @@ export interface SettingsState {
   locale: Locale;
   // 语言来源：auto=跟随系统语言自动判定，user=用户手动选过（不再自动覆盖）
   localeSource: "auto" | "user";
+  huabotBackup?: Pick<SettingsState, "llm" | "tts" | "defaultImageModel" | "defaultVideoModel">;
 
   // Actions
   setLocale: (locale: Locale) => void;
@@ -112,6 +113,8 @@ export interface SettingsState {
   applyProductionProfile: (profile: ProductionProfileId) => void;
   /** 一个 Atlas Key 一键接入：脚本+看图+生图+生视频+配音全配好（不覆盖用户已选模型/已开的配音） */
   applyAtlasOneKey: (apiKey: string) => void;
+  applyHuabotOneKey: (apiKey: string) => void;
+  disconnectHuabot: () => void;
 }
 
 /** Pollinations 的新端点（旧的 text.pollinations.ai 免 Key 接口已停用） */
@@ -133,6 +136,21 @@ const POLLINATIONS_BASE_URL = "https://gen.pollinations.ai/v1";
  * 只监听 127.0.0.1，用户会看到一个无从排查的"连不上"（issue #19 追问）。同端口同机，改写无副作用。
  */
 export function migrateSettings(state: SettingsState): SettingsState {
+  const huabot = state?.providers?.huabot;
+  const huabotKey = huabot?.apiKey || "";
+  state.providers = { huabot: { enabled: Boolean(huabot?.enabled && huabotKey), apiKey: huabotKey, baseUrl: "https://huabot.com" } };
+  state.customModels = (state.customModels ?? []).filter((model) => model.provider === "huabot");
+  const aliases: Record<string, string> = {
+    "openai/gpt-image-2": "gpt-image-2",
+    "bytedance/seedance-2.0-mini": "seedance-2.0-mini",
+    "bytedance/seedance-2.0": "seedance-2.0",
+    "bytedance/seedance-2.5": "seedance-2.5",
+    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
+  };
+  state.defaultImageModel = aliases[state.defaultImageModel] ?? state.defaultImageModel;
+  state.defaultVideoModel = aliases[state.defaultVideoModel] ?? state.defaultVideoModel;
+  state.llm = { ...state.llm, provider: "Huabot", baseUrl: "https://huabot.com/v1", apiKey: huabotKey };
+  state.tts = { ...state.tts, provider: "openai", baseUrl: "https://huabot.com/v1", apiKey: huabotKey };
   const llm = state?.llm;
   if (llm?.baseUrl) {
     const fixes: Array<{ hostRe: RegExp; from: string; to: string }> = [
@@ -179,6 +197,7 @@ export const useSettingsStore = create<SettingsState>()(
         alibaba: { enabled: false, apiKey: "" },
         siliconflow: { enabled: false, apiKey: "" },
         openai: { enabled: false, apiKey: "" },
+        huabot: { enabled: false, apiKey: "" },
       },
       llm: {
         provider: "",
@@ -272,6 +291,25 @@ export const useSettingsStore = create<SettingsState>()(
               : { ...state.tts, enabled: true, provider: "atlas", baseUrl: ATLAS_BASE_URL, model: "", voice: "" },
           };
         }),
+      applyHuabotOneKey: (apiKey) => set((state) => {
+        const key = apiKey.trim();
+        return {
+          huabotBackup: undefined,
+          providers: { huabot: { enabled: true, apiKey: key, baseUrl: "https://huabot.com" } },
+          llm: { provider: "Huabot", baseUrl: "https://huabot.com/v1", apiKey: key, model: state.llm.provider === "Huabot" ? state.llm.model : "deepseek-v4-pro", visionModel: state.llm.provider === "Huabot" ? state.llm.visionModel : "deepseek-v4-pro" },
+          tts: { ...state.tts, enabled: true, provider: "openai", baseUrl: "https://huabot.com/v1", apiKey: key, model: "qwen3-tts-flash" },
+          defaultImageModel: state.defaultImageModel || "gpt-image-2",
+          defaultVideoModel: state.defaultVideoModel || "seedance-2.0",
+        };
+      }),
+      disconnectHuabot: () => set((state) => {
+        return {
+          providers: { huabot: { enabled: false, apiKey: "", baseUrl: "https://huabot.com" } },
+          llm: { ...state.llm, apiKey: "" },
+          tts: { ...state.tts, apiKey: "" },
+          huabotBackup: undefined,
+        };
+      }),
     }),
     {
       name: "daihuo-jianshou-settings",
@@ -283,7 +321,7 @@ export const useSettingsStore = create<SettingsState>()(
       // v4：补充面向创作目标的生产方案；旧设置迁移到兼顾质量与成本的 balanced。
       // v5：Atlas 一键接入曾把「素材网关」/api/v1 写进 LLM 地址，导致写脚本必 404（issue #24），
       // 迁到 OpenAI 兼容的聊天网关 /v1。
-      version: 5,
+      version: 7,
       migrate: (persisted) => migrateSettings(persisted as SettingsState),
     }
   )
