@@ -2,6 +2,45 @@ import { describe, expect, it } from "vitest";
 import { buildVideoControlPlan, sanitizeVideoControlSummary } from "@/lib/video-control-plan";
 
 describe("video control plan", () => {
+  it.each(["seedance-2.0-mini", "seedance-2.0", "seedance-2.5"])("keeps Huabot %s product references in upload order", (modelId) => {
+    const plan = buildVideoControlPlan({
+      provider: "huabot", modelId, locale: "en",
+      firstFrameUrl: "https://e.com/key.png", lastFrameUrl: "https://e.com/end.png",
+      characterReferenceUrl: "https://e.com/person.png", productReferenceUrl: "https://e.com/product.png",
+      continuityReferenceUrl: "https://e.com/tail.png",
+      motionReferenceUrl: "https://e.com/motion.mp4", audioReferenceUrl: "https://e.com/audio.wav",
+    });
+    expect(plan).toMatchObject({ strategy: "reference-pack", mode: "image-to-video", referenceCount: 5,
+      warnings: ["reference-audio-unsupported"] });
+    expect(plan.firstFrameUrl).toBe("https://e.com/key.png");
+    expect(plan.lastFrameUrl).toBe("https://e.com/end.png");
+    expect(plan.referenceInputs.map((item) => item.role)).toEqual(["character", "product", "continuity"]);
+    expect(plan.referenceInputs.every((item) => item.mediaType === "image")).toBe(true);
+    expect(plan.promptSuffix).toContain("@Image2=product appearance");
+    expect(plan.promptSuffix).toContain("@Image3=previous-shot continuity");
+  });
+
+  it("deduplicates Huabot images before numbering the product reference", () => {
+    const plan = buildVideoControlPlan({
+      provider: "huabot", modelId: "seedance-2.0", locale: "en",
+      firstFrameUrl: "https://e.com/key.png", lastFrameUrl: "https://e.com/key.png",
+      productReferenceUrl: "https://e.com/product.png", continuityReferenceUrl: "https://e.com/product.png",
+    });
+    expect(plan.referenceCount).toBe(3);
+    expect(plan.referenceInputs.map((item) => item.role)).toEqual(["product"]);
+    expect(plan.promptSuffix).toContain("@Image1=product appearance");
+    expect(plan.promptSuffix).not.toContain("@Image2");
+  });
+
+  it("preserves Huabot native frames without extra image references", () => {
+    const plan = buildVideoControlPlan({
+      provider: "huabot", modelId: "seedance-2.0-mini", locale: "en",
+      firstFrameUrl: "https://e.com/key.png", lastFrameUrl: "https://e.com/end.png",
+    });
+    expect(plan).toMatchObject({ strategy: "keyframe", mode: "image-to-video", referenceCount: 2,
+      firstFrameUrl: "https://e.com/key.png", lastFrameUrl: "https://e.com/end.png", referenceInputs: [] });
+  });
+
   it("uses an Atlas reference sibling for a multi-subject pack", () => {
     const plan = buildVideoControlPlan({
       provider: "atlas-cloud",

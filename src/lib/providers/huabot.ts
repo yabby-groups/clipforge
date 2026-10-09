@@ -1,7 +1,7 @@
 import { BaseProvider, ProviderError } from "./base";
 import type { ImageOptions, ImageResult, MediaType, Model, ProviderConfig, TaskStatus, TaskStatusEnum, VideoOptions, VideoResult } from "./types";
 
-type Task = { id?: string; status?: string; error?: { message?: string } | string; output?: string | string[]; data?: Array<{ url?: string }> };
+type Task = { id?: string; status?: string; error?: { message?: string } | string; output?: string | string[]; unsigned_urls?: string[]; url?: string; data?: Array<{ url?: string }> };
 type HuabotCatalogEntry = { name?: string; title?: string; alias?: string; description?: string; api_modes?: string[] };
 
 /** Read only an explicit USD/second rate for the requested resolution. */
@@ -146,6 +146,10 @@ export class HuabotProvider extends BaseProvider {
     const references = await Promise.all((options.referenceImageUrls ?? []).map(async (reference) => ({
       type: "image_url", image_url: { url: await this.videoReferenceUrl(reference) },
     })));
+    const frameImages = [
+      ...(options.firstFrameUrl ? [{ type: "image_url", image_url: { url: options.firstFrameUrl }, frame_type: "first_frame" }] : []),
+      ...(options.lastFrameUrl ? [{ type: "image_url", image_url: { url: options.lastFrameUrl }, frame_type: "last_frame" }] : []),
+    ];
     const shortSide = Math.min(options.width ?? 720, options.height ?? 1280);
     const ratio = options.width && options.height
       ? options.width === options.height ? "1:1" : options.width > options.height ? "16:9" : "9:16"
@@ -153,8 +157,7 @@ export class HuabotProvider extends BaseProvider {
     const response = await this.request<Task>("/api/v1/videos", { method: "POST", timeout: 60_000, body: {
       ...options.extra,
       model: modelId, prompt: options.prompt,
-      ...(options.firstFrameUrl ? { image: options.firstFrameUrl } : {}),
-      ...(options.lastFrameUrl ? { last_image: options.lastFrameUrl } : {}),
+      ...(frameImages.length ? { frame_images: frameImages } : {}),
       ...(references.length ? { input_references: references, omni_reference_task_type: "reference" } : {}),
       ...(options.width || options.height ? { resolution: shortSide >= 1080 ? "1080p" : shortSide >= 720 ? "720p" : "480p" } : {}),
       ...(ratio ? { ratio } : {}),
@@ -196,8 +199,9 @@ export class HuabotProvider extends BaseProvider {
     const response = await this.request<Task>(`/api/v1/videos/${encodeURIComponent(taskId)}`);
     const raw = String(response.status || "").toLowerCase();
     const status: TaskStatusEnum = /complete|success/.test(raw) ? "completed" : /fail|error/.test(raw) ? "failed" : /cancel/.test(raw) ? "cancelled" : /queue|pending/.test(raw) ? "pending" : "processing";
-    const output = Array.isArray(response.output) ? response.output : response.output ? [response.output] : [];
-    return { taskId, status, ...(status === "completed" ? { result: { taskId, modelId: "", videoUrls: output.length ? output : [`${this.config.baseUrl}/api/v1/videos/${encodeURIComponent(taskId)}/content`] } as VideoResult } : {}), ...(status === "failed" ? { error: typeof response.error === "string" ? response.error : response.error?.message || "Huabot video failed" } : {}) };
+    const output = (Array.isArray(response.output) ? response.output : response.output ? [response.output] : []).filter(Boolean);
+    const videoUrls = output.length ? output : response.unsigned_urls?.filter(Boolean).length ? response.unsigned_urls.filter(Boolean) : response.url ? [response.url] : [];
+    return { taskId, status, ...(status === "completed" ? { result: { taskId, modelId: "", videoUrls: videoUrls.length ? videoUrls : [`${this.config.baseUrl}/api/v1/videos/${encodeURIComponent(taskId)}/content`] } as VideoResult } : {}), ...(status === "failed" ? { error: typeof response.error === "string" ? response.error : response.error?.message || "Huabot video failed" } : {}) };
   }
   async listModels(mediaType?: MediaType): Promise<Model[]> {
     try {

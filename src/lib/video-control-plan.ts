@@ -122,7 +122,9 @@ export function buildVideoControlPlan(input: {
   // carry that end frame as a target anchor, while plain continuity-only requests retain the
   // provider's stronger native start/end-frame contract.
   const isAtlasReferenceMode = input.provider === "atlas-cloud" && hasVisualPack && canUseVisualPack && (!input.lastFrameUrl || hasIdentityPack);
-  const canAttachAlongsideFrames = input.provider === "volcengine" && hasVisualPack && canUseVisualPack;
+  const isHuabotReferenceMode = input.provider === "huabot" && canUseVisualPack && optional.some((item) => item.mediaType === "image");
+  const isReferenceMode = isAtlasReferenceMode;
+  const canAttachAlongsideFrames = (input.provider === "volcengine" && hasVisualPack && canUseVisualPack) || isHuabotReferenceMode;
 
   if (hasVisualPack && !canUseVisualPack) warnings.push("reference-pack-unsupported");
   if (hasVisualPack && input.provider === "atlas-cloud" && canUseVisualPack && input.lastFrameUrl && !isAtlasReferenceMode) {
@@ -131,7 +133,7 @@ export function buildVideoControlPlan(input: {
   if (input.audioReferenceUrl && !canUseAudioReference) warnings.push("reference-audio-unsupported");
 
   let referenceInputs: VideoReferenceInput[] = [];
-  if (isAtlasReferenceMode) {
+  if (isReferenceMode) {
     if (isNonEmpty(input.firstFrameUrl)) {
       referenceInputs.push({ url: input.firstFrameUrl, role: "keyframe", mediaType: "image", required: true });
     }
@@ -140,7 +142,9 @@ export function buildVideoControlPlan(input: {
     }
     referenceInputs.push(...optional.filter((item) => item.mediaType !== "audio" || canUseAudioReference));
   } else if (canAttachAlongsideFrames) {
-    referenceInputs.push(...optional.filter((item) => item.mediaType !== "audio" || canUseAudioReference));
+    referenceInputs.push(...optional.filter((item) => isHuabotReferenceMode
+      ? item.mediaType === "image"
+      : item.mediaType !== "audio" || canUseAudioReference));
   } else if (input.audioReferenceUrl && canUseAudioReference) {
     referenceInputs.push({ url: input.audioReferenceUrl, role: "audio", mediaType: "audio", required: false });
   }
@@ -158,11 +162,12 @@ export function buildVideoControlPlan(input: {
   const voiceoverBound = nativeAudio && isNonEmpty(input.voiceover);
   const audioMode: VideoControlSummary["audioMode"] = nativeAudio ? "native" : isNonEmpty(input.voiceover) ? "post" : "none";
   const audioPrompt = nativeAudio ? nativeAudioInstruction(input) : undefined;
-  const frameImageCount = canAttachAlongsideFrames
+  // Huabot numbers input_references independently of its native frame_images.
+  const frameImageCount = canAttachAlongsideFrames && !isHuabotReferenceMode
     ? Number(isNonEmpty(input.firstFrameUrl)) + Number(isNonEmpty(input.lastFrameUrl))
     : 0;
   const promptSuffix = [referenceInstruction(referenceInputs, input.locale, frameImageCount), audioPrompt].filter(Boolean).join(input.locale === "zh" ? "。" : " ");
-  const strategy: VideoControlSummary["strategy"] = isAtlasReferenceMode || canAttachAlongsideFrames ? "reference-pack" : "keyframe";
+  const strategy: VideoControlSummary["strategy"] = isReferenceMode || canAttachAlongsideFrames ? "reference-pack" : "keyframe";
   const referenceRoles = unique([
     ...(isNonEmpty(input.firstFrameUrl) ? ["keyframe" as const] : []),
     ...(isNonEmpty(input.lastFrameUrl) ? ["end-frame" as const] : []),
@@ -172,14 +177,14 @@ export function buildVideoControlPlan(input: {
   return {
     version: 1,
     strategy,
-    mode: isAtlasReferenceMode ? "video-to-video" : "image-to-video",
+    mode: isReferenceMode ? "video-to-video" : "image-to-video",
     referenceRoles,
-    referenceCount: referenceInputs.length + (isAtlasReferenceMode ? 0 : Number(Boolean(input.firstFrameUrl)) + Number(Boolean(input.lastFrameUrl))),
+    referenceCount: referenceInputs.length + (isReferenceMode ? 0 : Number(Boolean(input.firstFrameUrl)) + Number(Boolean(input.lastFrameUrl))),
     audioMode,
     voiceoverBound,
     warnings: unique(warnings),
-    ...(!isAtlasReferenceMode && isNonEmpty(input.firstFrameUrl) && { firstFrameUrl: input.firstFrameUrl }),
-    ...(!isAtlasReferenceMode && isNonEmpty(input.lastFrameUrl) && { lastFrameUrl: input.lastFrameUrl }),
+    ...(!isReferenceMode && isNonEmpty(input.firstFrameUrl) && { firstFrameUrl: input.firstFrameUrl }),
+    ...(!isReferenceMode && isNonEmpty(input.lastFrameUrl) && { lastFrameUrl: input.lastFrameUrl }),
     referenceInputs,
     promptSuffix,
     ...(audioPrompt && { audioPrompt }),

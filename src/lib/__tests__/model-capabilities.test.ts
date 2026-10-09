@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { getVideoModelCapabilities, preflightVideoGeneration } from "@/lib/model-capabilities";
 
 describe("video model capabilities", () => {
+  it.each(["seedance-2.0-mini", "seedance-2.0", "seedance-2.5"])("declares only image references for Huabot %s", (modelId) => {
+    expect(getVideoModelCapabilities(modelId, true, "huabot")).toMatchObject({
+      referenceImages: true, referenceVideo: false, referenceAudio: false, maxReferenceImages: 9,
+    });
+    expect(getVideoModelCapabilities(modelId, true, "other").referenceImages).not.toBe(true);
+  });
+
   it("normalizes a schema-backed image-to-video model", () => {
     const caps = getVideoModelCapabilities("google/veo3.1/image-to-video");
     expect(caps).toMatchObject({

@@ -86,6 +86,9 @@ function referenceSibling(modelId: string): string | undefined {
 }
 
 function referenceCapabilities(modelId: string, provider?: string): Pick<VideoModelCapabilities, "referenceImages" | "referenceVideo" | "referenceAudio" | "maxReferenceImages"> {
+  if (provider === "huabot" && /^(?:seedance-2\.0(?:-mini)?|seedance-2\.5)$/.test(modelId)) {
+    return { referenceImages: true, referenceVideo: false, referenceAudio: false, maxReferenceImages: 9 };
+  }
   const sibling = referenceSibling(modelId);
   const spec = sibling ? getVideoParamSpec(sibling) : undefined;
   const arkMultimodal = provider === "volcengine" && /seedance|doubao/i.test(modelId);

@@ -2,8 +2,71 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HuabotProvider, resolveHuabotVideoModel, huabotVideoUnitPrice } from "@/lib/providers/huabot";
 import { estimateFilmSpend } from "@/lib/storyboard-film";
 import { toEditVariant } from "@/lib/gen-params";
+import { buildVideoControlPlan } from "@/lib/video-control-plan";
 
 describe("HuabotProvider", () => {
+  it.each(["seedance-2.0-mini", "seedance-2.0", "seedance-2.5"])("sends per-shot product references to Huabot %s", async (modelId) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "shot-1" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const plan = buildVideoControlPlan({
+      provider: "huabot", modelId, locale: "en",
+      firstFrameUrl: "https://e.com/key.png", lastFrameUrl: "https://e.com/end.png",
+      characterReferenceUrl: "https://e.com/person.png", productReferenceUrl: "https://e.com/product.png",
+    });
+    const provider = new HuabotProvider({ name: "huabot", apiKey: "test", baseUrl: "https://huabot.com" });
+    await provider.submitVideoTask({
+      modelId, mode: plan.mode, prompt: plan.promptSuffix,
+      firstFrameUrl: plan.firstFrameUrl, lastFrameUrl: plan.lastFrameUrl,
+      referenceImageUrls: plan.referenceInputs.filter((item) => item.mediaType === "image").map((item) => item.url),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://huabot.com/api/v1/videos");
+    const body = JSON.parse(init.body as string);
+    expect(body.input_references).toEqual(["person", "product"].map((name) => ({
+      type: "image_url", image_url: { url: `https://e.com/${name}.png` },
+    })));
+    expect(body.omni_reference_task_type).toBe("reference");
+    expect(body.prompt).toContain("@Image2=product appearance");
+    expect(body.frame_images).toEqual([
+      { type: "image_url", image_url: { url: "https://e.com/key.png" }, frame_type: "first_frame" },
+      { type: "image_url", image_url: { url: "https://e.com/end.png" }, frame_type: "last_frame" },
+    ]);
+    expect(body.image).toBeUndefined();
+    expect(body.last_image).toBeUndefined();
+  });
+
+  it.each([false, true])("sends native data URL frames with last frame enabled: %s", async (withLastFrame) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "frames-1" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const first = "data:image/png;base64,aW1hZ2U=";
+    const last = "data:image/png;base64,bGFzdA==";
+    const provider = new HuabotProvider({ name: "huabot", apiKey: "test", baseUrl: "https://huabot.com" });
+    await provider.submitVideoTask({ modelId: "seedance-2.0-mini", mode: "image-to-video", prompt: "test",
+      firstFrameUrl: first, ...(withLastFrame && { lastFrameUrl: last }) });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.frame_images).toEqual([
+      { type: "image_url", image_url: { url: first }, frame_type: "first_frame" },
+      ...(withLastFrame ? [{ type: "image_url", image_url: { url: last }, frame_type: "last_frame" }] : []),
+    ]);
+    expect(body.input_references).toBeUndefined();
+  });
+
+  it.each([
+    { output: "https://e.com/output.mp4" },
+    { output: ["https://e.com/output.mp4"], unsigned_urls: ["https://e.com/other.mp4"] },
+    { unsigned_urls: ["", "https://e.com/output.mp4"] },
+    { unsigned_urls: [""], url: "https://e.com/output.mp4" },
+    { url: "https://e.com/output.mp4" },
+  ])("reads completed video URLs from %j", async (result) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "completed", ...result }))));
+    const provider = new HuabotProvider({ name: "huabot", apiKey: "test", baseUrl: "https://huabot.com" });
+    await expect(provider.getTaskStatus("task-1")).resolves.toMatchObject({
+      status: "completed", result: { videoUrls: ["https://e.com/output.mp4"] },
+    });
+  });
+
   it("reads the published resolution rate without applying a second tier multiplier", () => {
     const description = "480p $0.1028/second\n\n720p $0.2311/second\n\n1080p $0.52/second\n\n4K $2.08/second";
     expect(huabotVideoUnitPrice(description, 1280, 720)).toBe(0.2311);
