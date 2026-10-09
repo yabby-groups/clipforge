@@ -181,7 +181,7 @@ export const compositions = sqliteTable("compositions", {
   // output file). Local extraction — never a third-party URL that can expire. Backfilled
   // lazily by /api/works for rows rendered before this column existed.
   thumbnailPath: text("thumbnail_path"),
-  resolution: text("resolution", { enum: ["720p", "1080p"] }).default("1080p"),
+  resolution: text("resolution", { enum: ["480p", "720p", "1080p"] }).default("1080p"),
   aspectRatio: text("aspect_ratio", { enum: ["9:16", "16:9", "1:1"] }).default("9:16"), // Portrait-first
   duration: integer("duration"), // Milliseconds
   bgmPath: text("bgm_path"),

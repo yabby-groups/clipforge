@@ -21,6 +21,7 @@ import {
 } from "@/lib/storyboard-film";
 import { fetchAtlasCatalog, getCachedAtlasEntry } from "@/lib/providers/atlas-catalog";
 import { ATLAS_BASE_URL } from "@/lib/atlas-onekey";
+import { fetchHuabotCatalog, huabotVideoUnitPrice } from "@/lib/providers/huabot";
 import { toRemoteUsableImage } from "@/lib/remote-image";
 import { probeMedia } from "@/lib/media-probe";
 import { recordAiTask, updateAiTask } from "@/lib/ai-tasks";
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (dryRun) {
       const prompt = buildStoryboardFilmPrompt(shots, script.characters, { characterSheet: !!characterSheetUrl });
       const previewOpts = (options ?? {}) as { width?: number; height?: number };
-      const estimate = estimateFilmSpend(await unitPriceUsd(choice.model, baseUrl), fit.seconds, previewOpts);
+      const estimate = await filmSpend(choice.model, fit.seconds, previewOpts, baseUrl);
       // planned reference count: one keyframe per shot (+ the identity sheet when present) —
       // computable before the grid pass has actually rendered the keyframes
       const plannedRefs = shots.length + (characterSheetUrl ? 1 : 0);
@@ -191,12 +192,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (Number.isFinite(cap) && cap > 0 && !acknowledgeOverCap) {
       // compare the HIGH end: a floor-priced estimate is exactly what hid the real bill (issue #28)
       const capOpts = (options ?? {}) as { width?: number; height?: number };
-      const estimate = estimateFilmSpend(await unitPriceUsd(choice.model, baseUrl), fit.seconds, capOpts);
+      const estimate = await filmSpend(choice.model, fit.seconds, capOpts, baseUrl);
       if (estimate && estimate.maxUsd > cap) {
         return apiError(
           req,
-          `预估花费最高 $${estimate.maxUsd.toFixed(2)}（${choice.model} $${estimate.unitUsd}/秒 × ${estimate.seconds} 秒；当前分辨率档实测约为基准价的 ${estimate.tierMultiplier} 倍）超过你设置的单次上限 $${cap}——请调高上限、调低分辨率、换更便宜的模型，或缩短脚本`,
-          `Estimated up to $${estimate.maxUsd.toFixed(2)} (${choice.model} at $${estimate.unitUsd}/s x ${estimate.seconds}s; this resolution tier measured about ${estimate.tierMultiplier}x the base rate) exceeds your per-run cap of $${cap} — raise the cap, lower the resolution, pick a cheaper model, or shorten the script`,
+          `预估花费最高 $${estimate.maxUsd.toFixed(2)}（${choice.model} $${estimate.unitUsd}/秒 × ${estimate.seconds} 秒；已计入当前分辨率）超过你设置的单次上限 $${cap}——请调高上限、调低分辨率、换更便宜的模型，或缩短脚本`,
+          `Estimated up to $${estimate.maxUsd.toFixed(2)} (${choice.model} at $${estimate.unitUsd}/s x ${estimate.seconds}s; adjusted for the current resolution) exceeds your per-run cap of $${cap} — raise the cap, lower the resolution, pick a cheaper model, or shorten the script`,
           400
         );
       }
@@ -295,10 +296,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
  * Published per-second price for a model, or undefined when the platform doesn't publish one.
  * The catalog endpoint is public (no key needed), so the free dryRun can price a run too.
  */
-async function unitPriceUsd(modelId: string, baseUrl?: string): Promise<number | undefined> {
+async function filmSpend(modelId: string, seconds: number, output: { width?: number; height?: number }, baseUrl?: string) {
   try {
+    if (/^seedance-/.test(modelId)) {
+      const entries = await fetchHuabotCatalog(baseUrl?.trim() || "https://huabot.com");
+      const entry = entries.find((entry) => entry.alias === modelId);
+      const rate = huabotVideoUnitPrice(entry?.description, output.width ?? 720, output.height ?? 1280);
+      // The rate already prices this resolution; do not apply Atlas's tier multiplier again.
+      return estimateFilmSpend(rate, seconds);
+    }
     await fetchAtlasCatalog(baseUrl?.trim() || ATLAS_BASE_URL);
-    return parseUnitUsd(getCachedAtlasEntry(modelId)?.priceBase);
+    return estimateFilmSpend(parseUnitUsd(getCachedAtlasEntry(modelId)?.priceBase), seconds, output);
   } catch {
     return undefined; // pricing is advisory — never block a run because the catalog was unreachable
   }

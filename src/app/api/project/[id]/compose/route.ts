@@ -302,10 +302,10 @@ export async function POST(
     const captionPresetRaw: unknown = body.captionPreset;
     const captionPreset = isCaptionPreset(captionPresetRaw) ? captionPresetRaw : undefined;
     const profile = resolveRenderProfile(validPreset);
-    const resolution: "720p" | "1080p" = validPreset
+    const resolution: "480p" | "720p" | "1080p" = validPreset
       ? profile.resolution
-      : body.resolution === "720p"
-        ? "720p"
+      : body.resolution === "720p" || body.resolution === "480p"
+        ? body.resolution
         : "1080p";
     const outputCfg = {
       resolution,

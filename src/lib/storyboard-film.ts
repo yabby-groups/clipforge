@@ -57,13 +57,15 @@ export interface FilmModelChoice {
  */
 export function resolveFilmModel(configured?: string | null): FilmModelChoice {
   const model = configured?.trim();
+  if (model && /^seedance-(2\.0(?:-mini)?|2\.5)$/.test(model)) return { model };
   if (model && model.includes("/reference-to-video")) return { model };
   return { model: FILM_FALLBACK_MODEL, ...(model ? { swappedFrom: model } : {}) };
 }
 
 /** The model's own longest single generation, when its schema declares a duration enum. */
 export function modelMaxSeconds(modelId?: string | null): number | undefined {
-  const durations = modelId ? getVideoParamSpec(modelId)?.durationEnum : undefined;
+  if (modelId === "seedance-2.0") return 15;
+  const durations = modelId ? filmModelSpec(modelId)?.durationEnum : undefined;
   return durations?.length ? Math.max(...durations) : undefined;
 }
 
@@ -250,9 +252,17 @@ export interface ReferenceQuotaCheck {
  * sheet = 10 refs against Seedance's 9-image cap.
  */
 export function referenceQuotaCheck(referenceImageCount: number, modelId: string): ReferenceQuotaCheck {
-  const limit = getVideoParamSpec(modelId)?.maxReferenceImages;
+  const limit = filmModelSpec(modelId)?.maxReferenceImages;
   if (limit === undefined) return { ok: true, count: referenceImageCount };
   return { ok: referenceImageCount <= limit, count: referenceImageCount, limit };
+}
+
+function filmModelSpec(modelId: string) {
+  if (modelId === "seedance-2.0") modelId = "seedance-2.0-mini";
+  const id = /^seedance-(2\.0(?:-mini)?|2\.5)$/.test(modelId)
+    ? `bytedance/${modelId}/reference-to-video`
+    : modelId;
+  return getVideoParamSpec(id);
 }
 
 /**

@@ -277,6 +277,10 @@ describe("一键整片：模型解析与时长适配", () => {
   });
 
   it("modelMaxSeconds：读模型自己的时长上限，未知模型返回 undefined", () => {
+    for (const alias of ["seedance-2.0-mini", "seedance-2.0", "seedance-2.5"]) {
+      expect(resolveFilmModel(alias)).toEqual({ model: alias });
+      expect(modelMaxSeconds(alias)).toBe(alias === "seedance-2.5" ? 30 : 15);
+    }
     expect(modelMaxSeconds("bytedance/seedance-2.5/reference-to-video")).toBe(30);
     expect(modelMaxSeconds("minimax/h3/reference-to-video")).toBe(15);
     expect(modelMaxSeconds("who/knows")).toBeUndefined();

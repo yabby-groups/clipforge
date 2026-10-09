@@ -537,6 +537,7 @@ export default function ScriptPage() {
         // preview the CONFIGURED model: the route resolves it the same way the paid submit does,
         // so a forced switch shows up in the confirm card instead of only on the invoice (issue #28)
         model: useSettingsStore.getState().defaultVideoModel,
+        options: buildVideoOptions({ ...useSettingsStore.getState().videoParams, aspectRatio: "9:16" }),
         // a picked presenter WILL ride as a reference sheet (generated on demand later), so the
         // preview must count its slot now — the dryRun branch only reads truthiness
         ...(presenter && { characterSheetUrl: presenter.referenceImages?.[0] ?? "planned" }),

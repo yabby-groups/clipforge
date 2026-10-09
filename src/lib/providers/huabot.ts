@@ -2,7 +2,18 @@ import { BaseProvider, ProviderError } from "./base";
 import type { ImageOptions, ImageResult, MediaType, Model, ProviderConfig, TaskStatus, TaskStatusEnum, VideoOptions, VideoResult } from "./types";
 
 type Task = { id?: string; status?: string; error?: { message?: string } | string; output?: string | string[]; data?: Array<{ url?: string }> };
-type HuabotCatalogEntry = { name?: string; title?: string; alias?: string; api_modes?: string[] };
+type HuabotCatalogEntry = { name?: string; title?: string; alias?: string; description?: string; api_modes?: string[] };
+
+/** Read only an explicit USD/second rate for the requested resolution. */
+export function huabotVideoUnitPrice(description: string | undefined, width = 720, height = 1280): number | undefined {
+  if (!description || !Number.isFinite(width) || !Number.isFinite(height)) return undefined;
+  const side = Math.min(width, height);
+  const tier = side >= 1080 ? "1080p" : side >= 720 ? "720p" : "480p";
+  const match = description.match(new RegExp(`(?:^|\\n)\\s*${tier}\\s+\\$([0-9]+(?:\\.[0-9]+)?)\\s*/\\s*(?:second|每秒|秒)(?=\\s|$)`, "i"));
+  if (!match) return undefined;
+  const rate = Number(match[1]);
+  return Number.isFinite(rate) && rate >= 0 ? rate : undefined;
+}
 
 const VIDEO_MODEL_IDS: Record<string, string> = {
   "seedance-2.0-mini": "doubao-seedance-2.0-mini",
@@ -125,9 +136,52 @@ export class HuabotProvider extends BaseProvider {
   async submitVideoTask(options: VideoOptions): Promise<{ taskId: string; modelId: string }> {
     const modelId = resolveHuabotVideoModel(options.modelId);
     if (!modelId) throw new ProviderError("Huabot does not support this video model", "MODEL_NOT_SUPPORTED", this.name);
-    const response = await this.request<Task>("/api/v1/videos", { method: "POST", timeout: 60_000, body: { model: modelId, prompt: options.prompt, ...(options.firstFrameUrl ? { image: options.firstFrameUrl } : {}), ...(options.lastFrameUrl ? { last_image: options.lastFrameUrl } : {}), ...(options.duration ? { duration: options.duration } : {}), ...(options.audioEnabled !== undefined ? { generate_audio: options.audioEnabled } : {}), ...options.extra } });
+    const maxSeconds = options.modelId === "seedance-2.5" ? 30 : 15;
+    if (options.duration !== undefined && (!Number.isFinite(options.duration) || options.duration < 4 || options.duration > maxSeconds)) {
+      throw new ProviderError(`该模型单次视频时长必须为 4-${maxSeconds} 秒`, "INVALID_DURATION", this.name);
+    }
+    if ((options.referenceImageUrls?.length ?? 0) > 9) {
+      throw new ProviderError("参考图不能超过 9 张", "BAD_REFERENCE", this.name);
+    }
+    const references = await Promise.all((options.referenceImageUrls ?? []).map(async (reference) => ({
+      type: "image_url", image_url: { url: await this.videoReferenceUrl(reference) },
+    })));
+    const shortSide = Math.min(options.width ?? 720, options.height ?? 1280);
+    const ratio = options.width && options.height
+      ? options.width === options.height ? "1:1" : options.width > options.height ? "16:9" : "9:16"
+      : undefined;
+    const response = await this.request<Task>("/api/v1/videos", { method: "POST", timeout: 60_000, body: {
+      ...options.extra,
+      model: modelId, prompt: options.prompt,
+      ...(options.firstFrameUrl ? { image: options.firstFrameUrl } : {}),
+      ...(options.lastFrameUrl ? { last_image: options.lastFrameUrl } : {}),
+      ...(references.length ? { input_references: references, omni_reference_task_type: "reference" } : {}),
+      ...(options.width || options.height ? { resolution: shortSide >= 1080 ? "1080p" : shortSide >= 720 ? "720p" : "480p" } : {}),
+      ...(ratio ? { ratio } : {}),
+      ...(options.duration ? { duration: options.duration } : {}),
+      ...(options.audioEnabled !== undefined ? { generate_audio: options.audioEnabled } : {}),
+    } });
     if (!response.id) throw new ProviderError("Huabot video response has no task id", "NO_TASK_ID", this.name);
     return { taskId: response.id, modelId };
+  }
+  private async videoReferenceUrl(reference: string): Promise<string> {
+    if (!reference.startsWith("data:")) return reference;
+    const { blob, filename } = await this.fetchReferenceImage(reference);
+    const form = new FormData();
+    form.append("file", blob, filename);
+    form.append("temporary", "true");
+    const response = await fetch(`${this.config.baseUrl}/api/file/run/`, {
+      method: "POST", headers: this.getAuthHeaders(), body: form,
+      signal: AbortSignal.timeout(this.config.timeout ?? 120_000),
+    });
+    if (!response.ok) throw new ProviderError(`参考图上传失败: ${response.status}`, "BAD_REFERENCE", this.name);
+    const result = await response.json() as { file?: { file_key?: string; file_ext?: string } };
+    const key = result.file?.file_key?.replaceAll("-", "") ?? "";
+    const ext = result.file?.file_ext?.replace(/^\./, "").toLowerCase() ?? "";
+    if (!/^[a-zA-Z0-9]{4,}$/.test(key) || !/^[a-z0-9]+$/.test(ext)) {
+      throw new ProviderError("参考图上传未返回有效文件地址", "BAD_REFERENCE", this.name);
+    }
+    return `${this.config.baseUrl}/upload/${key.slice(0, 2)}/${key.slice(2, 4)}/${key}.${ext}`;
   }
   async generateVideo(options: VideoOptions): Promise<VideoResult> {
     const started = Date.now(); const submitted = await this.submitVideoTask(options); const status = await this.pollTaskStatus(submitted.taskId, { interval: 5000 });

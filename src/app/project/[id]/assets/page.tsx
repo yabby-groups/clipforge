@@ -891,7 +891,10 @@ export default function AssetsPage() {
       const res = await fetch(`/api/project/${id}/storyboard-film`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scriptId, dryRun: true, model: videoModelTarget.model, baseUrl: videoModelTarget.baseUrl }),
+        body: JSON.stringify({ scriptId, dryRun: true, model: videoModelTarget.model, baseUrl: videoModelTarget.baseUrl,
+          ...(presenterSheet && { characterSheetUrl: presenterSheet }),
+          options: buildVideoOptions(videoParams ? { ...videoParams, aspectRatio: "9:16" } : undefined),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("filmFailed"));
@@ -901,7 +904,7 @@ export default function AssetsPage() {
     } finally {
       setIsFilmGenerating(false);
     }
-  }, [id, scriptId, videoModelTarget, isFilmGenerating, t]);
+  }, [id, scriptId, videoModelTarget, videoParams, presenterSheet, isFilmGenerating, t]);
 
   const runStoryboardFilm = useCallback(async () => {
     if (!videoModelTarget || !scriptId || isFilmGenerating) return;

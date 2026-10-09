@@ -32,6 +32,7 @@ import { PresenterManager } from "@/components/presenter-manager";
 
 // default resolution options
 const resolutionOptions = [
+  { value: "480p", label: "480p (854x480)" },
   { value: "720p", label: "720p (1280x720)" },
   { value: "1080p", label: "1080p (1920x1080)" },
 ];
@@ -780,7 +781,7 @@ export default function SettingsPage() {
                       <Select
                         value={defaultResolution}
                         onValueChange={(val) =>
-                          setDefaultResolution(val as "720p" | "1080p")
+                          setDefaultResolution(val as "480p" | "720p" | "1080p")
                         }
                       >
                         <SelectTrigger className="w-full">

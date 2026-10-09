@@ -11,7 +11,7 @@
  */
 
 export type GenAspectRatio = "9:16" | "16:9" | "1:1";
-export type GenResolution = "720p" | "1080p";
+export type GenResolution = "480p" | "720p" | "1080p";
 export type GenMediaType = "image" | "video";
 
 /** User-defined custom model (any model id mounted on an existing platform) */
@@ -81,6 +81,7 @@ export const ASPECT_RATIO_OPTIONS: { value: GenAspectRatio; label: string }[] = 
 ];
 
 export const RESOLUTION_OPTIONS: { value: GenResolution; label: string }[] = [
+  { value: "480p", label: "480p" },
   { value: "720p", label: "720p" },
   { value: "1080p", label: "1080p" },
 ];
@@ -100,8 +101,8 @@ export function imageSize(aspect: GenAspectRatio): { width: number; height: numb
 
 /** Resolution + aspect ratio → video dimensions */
 export function videoSize(resolution: GenResolution, aspect: GenAspectRatio): { width: number; height: number } {
-  const long = resolution === "1080p" ? 1920 : 1280;
-  const short = resolution === "1080p" ? 1080 : 720;
+  const long = resolution === "1080p" ? 1920 : resolution === "480p" ? 854 : 1280;
+  const short = resolution === "1080p" ? 1080 : resolution === "480p" ? 480 : 720;
   switch (aspect) {
     case "16:9":
       return { width: long, height: short };

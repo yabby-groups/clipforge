@@ -47,7 +47,7 @@ interface ComposeConfig {
   subtitleSize: number;
   subtitlePosition: "bottom" | "center" | "top";
   aspectRatio: "9:16" | "16:9" | "1:1";
-  resolution: "720p" | "1080p";
+  resolution: "480p" | "720p" | "1080p";
   /** 渲染质量预设：快速/标准/高清（决定分辨率 + 编码速度/质量） */
   renderPreset: RenderPreset;
   /** 带货：片尾购买 CTA 贴片 */
@@ -991,7 +991,7 @@ export default function VideoPage() {
                 <div className="space-y-2">
                   <span className="text-xs text-muted-foreground">{t("resolutionLabel")}</span>
                   <div className="grid grid-cols-2 gap-2">
-                    {(["720p", "1080p"] as const).map((res) => (
+                    {(["480p", "720p", "1080p"] as const).map((res) => (
                       <button
                         key={res}
                         onClick={() => setConfig((c) => ({ ...c, resolution: res }))}

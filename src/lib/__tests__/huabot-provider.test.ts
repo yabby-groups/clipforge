@@ -1,8 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HuabotProvider, resolveHuabotVideoModel } from "@/lib/providers/huabot";
+import { HuabotProvider, resolveHuabotVideoModel, huabotVideoUnitPrice } from "@/lib/providers/huabot";
+import { estimateFilmSpend } from "@/lib/storyboard-film";
 import { toEditVariant } from "@/lib/gen-params";
 
 describe("HuabotProvider", () => {
+  it("reads the published resolution rate without applying a second tier multiplier", () => {
+    const description = "480p $0.1028/second\n\n720p $0.2311/second\n\n1080p $0.52/second\n\n4K $2.08/second";
+    expect(huabotVideoUnitPrice(description, 1280, 720)).toBe(0.2311);
+    expect(huabotVideoUnitPrice(description, 720, 1280)).toBe(0.2311);
+    expect(huabotVideoUnitPrice(description, 1080, 1920)).toBe(0.52);
+    expect(huabotVideoUnitPrice(description, 480, 854)).toBe(0.1028);
+    expect(estimateFilmSpend(huabotVideoUnitPrice(description), 30)).toMatchObject({ unitUsd: 0.2311, maxUsd: 6.933, tierMultiplier: 1 });
+    expect(huabotVideoUnitPrice("720p $0.09072/每秒")).toBe(0.09072);
+    expect(huabotVideoUnitPrice("720p $0.09/秒")).toBe(0.09);
+  });
+
+  it("keeps absent, unsupported-unit and missing-tier prices unknown", () => {
+    expect(huabotVideoUnitPrice(undefined)).toBeUndefined();
+    expect(huabotVideoUnitPrice("480p $0.03/second")).toBeUndefined();
+    expect(huabotVideoUnitPrice("720p $0.03/call")).toBeUndefined();
+    expect(huabotVideoUnitPrice("720p CNY 0.03/second")).toBeUndefined();
+  });
   afterEach(() => vi.unstubAllGlobals());
 
   it("uses the enabled Huabot catalog and maps only media-capable entries", async () => {
@@ -39,6 +57,32 @@ describe("HuabotProvider", () => {
       "https://huabot.com/v1/images/generations",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ model: "gpt-image-2", prompt: "test", n: 1, size: "1024x1024" }) }),
     );
+  });
+
+  it("uploads local film references and sends all images with video output settings", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ file: { file_key: "abcd-1234", file_ext: ".png" } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "film-1" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new HuabotProvider({ name: "huabot", apiKey: "test", baseUrl: "https://huabot.com" });
+    await provider.submitVideoTask({ modelId: "seedance-2.0-mini", mode: "video-to-video", prompt: "film",
+      referenceImageUrls: ["data:image/png;base64,aW1hZ2U=", "https://example.com/shot.png"],
+      duration: 15, width: 720, height: 1280, audioEnabled: true });
+    expect(fetchMock.mock.calls[0][0]).toBe("https://huabot.com/api/file/run/");
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body).toMatchObject({ model: "doubao-seedance-2.0-mini", duration: 15, resolution: "720p", ratio: "9:16", generate_audio: true,
+      input_references: [
+        { type: "image_url", image_url: { url: "https://huabot.com/upload/ab/cd/abcd1234.png" } },
+        { type: "image_url", image_url: { url: "https://example.com/shot.png" } },
+      ] });
+  });
+
+  it("rejects overlong Mini films before uploading references or submitting a paid task", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new HuabotProvider({ name: "huabot", apiKey: "test", baseUrl: "https://huabot.com" });
+    await expect(provider.submitVideoTask({ modelId: "seedance-2.0-mini", mode: "video-to-video", prompt: "film", duration: 30 })).rejects.toThrow("4-15");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("uses the OpenAI-compatible edit endpoint and uploads reference images", async () => {

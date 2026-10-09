@@ -322,7 +322,7 @@ export interface ComposeConfig {
   projectId: string;
   clips: ClipInput[];
   output: {
-    resolution: "720p" | "1080p";
+    resolution: "480p" | "720p" | "1080p";
     aspectRatio: "9:16" | "16:9" | "1:1";
     bgmPath?: string;
     bgmVolume?: number; // 0-1
@@ -396,9 +396,9 @@ export interface ClipInput {
 
 // resolution mapping
 const RESOLUTIONS: Record<string, Record<string, { width: number; height: number }>> = {
-  "9:16": { "720p": { width: 720, height: 1280 }, "1080p": { width: 1080, height: 1920 } },
-  "16:9": { "720p": { width: 1280, height: 720 }, "1080p": { width: 1920, height: 1080 } },
-  "1:1": { "720p": { width: 720, height: 720 }, "1080p": { width: 1080, height: 1080 } },
+  "9:16": { "480p": { width: 480, height: 854 }, "720p": { width: 720, height: 1280 }, "1080p": { width: 1080, height: 1920 } },
+  "16:9": { "480p": { width: 854, height: 480 }, "720p": { width: 1280, height: 720 }, "1080p": { width: 1920, height: 1080 } },
+  "1:1": { "480p": { width: 480, height: 480 }, "720p": { width: 720, height: 720 }, "1080p": { width: 1080, height: 1080 } },
 };
 
 // segment normalisation filter: standardises every [v{i}] to the same pixel format / square pixels (SAR=1) / 30fps / standard timebase

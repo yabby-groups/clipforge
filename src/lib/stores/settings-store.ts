@@ -59,7 +59,7 @@ export interface SettingsState {
   // 默认生视频模型
   defaultVideoModel: string;
   // 默认分辨率
-  defaultResolution: "720p" | "1080p";
+  defaultResolution: "480p" | "720p" | "1080p";
   /** Refuse a single paid generation whose estimate exceeds this many USD (0 = no cap) */
   spendCapUsd: number;
   // 默认画面比例
@@ -100,7 +100,7 @@ export interface SettingsState {
   setTTS: (tts: TTSSetting) => void;
   setDefaultImageModel: (model: string) => void;
   setDefaultVideoModel: (model: string) => void;
-  setDefaultResolution: (resolution: "720p" | "1080p") => void;
+  setDefaultResolution: (resolution: "480p" | "720p" | "1080p") => void;
   setSpendCapUsd: (usd: number) => void;
   setDefaultAspectRatio: (ratio: "9:16" | "16:9" | "1:1") => void;
   addCustomModel: (model: CustomModel) => void;
@@ -249,7 +249,7 @@ export const useSettingsStore = create<SettingsState>()(
       setTTS: (tts) => set({ tts }),
       setDefaultImageModel: (model) => set({ defaultImageModel: model }),
       setDefaultVideoModel: (model) => set({ defaultVideoModel: model }),
-      setDefaultResolution: (resolution) => set({ defaultResolution: resolution }),
+      setDefaultResolution: (resolution) => set((state) => ({ defaultResolution: resolution, videoParams: { ...state.videoParams, resolution } })),
       setSpendCapUsd: (usd) => set({ spendCapUsd: Number.isFinite(usd) && usd >= 0 ? usd : 0 }),
       setDefaultAspectRatio: (ratio) => set({ defaultAspectRatio: ratio }),
       addCustomModel: (model) =>
