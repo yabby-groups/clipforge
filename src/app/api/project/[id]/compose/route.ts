@@ -237,7 +237,7 @@ export async function POST(
     const composeWarnings: { code: "tts_fallback_free" | "tts_failed"; shotId: number }[] = [];
 
     /**
-     * 为某分镜生成配音并落地为本地 mp3；失败返回 undefined（不阻断合成）。
+     * 为某分镜生成配音并落地为本地 mp3；失败阻断合成，避免交付缺句成片。
      * 返回 { file, words }：words 为免费 Edge 引擎回传的词级时间戳（卡拉OK真同步用），付费引擎无词数据。
      * 付费 TTS 抛错时回退免费 Edge（同文案照常出声）并记录 tts_fallback_free 警告——
      * 哑镜是最刺耳的成片缺陷，免费兜底链永远比静音好。
@@ -276,13 +276,13 @@ export async function POST(
           audio = d.audio;
           words = d.words.length > 0 ? d.words : undefined;
         }
-        const file = join(ttsDir, `shot-${shotId}.mp3`);
+        const file = join(ttsDir, `shot-${shotId}-${comp.id}.mp3`);
         await writeFile(file, audio);
         return { file, words };
       } catch (e) {
-        console.warn(`分镜 ${shotId} 配音生成失败（已跳过）:`, e);
+        console.warn(`分镜 ${shotId} 配音生成失败:`, e);
         composeWarnings.push({ code: "tts_failed", shotId });
-        return undefined;
+        throw new Error(`分镜 ${shotId} 配音生成失败，请重试合成`, { cause: e });
       }
     }
 
@@ -347,7 +347,7 @@ export async function POST(
         missing.push(shot.shotId);
         continue;
       }
-      // 视频素材 vs 静态图：视频自带音轨时用模型原生语音，不再叠 TTS（避免双重声音）
+      // 启用脚本配音时替换素材原声；可听见的环境音并不代表脚本已被朗读。
       // 注意：免费素材库（Wikimedia）也会返回 .ogv 等容器，必须纳入视频判定，否则被当静态图 → 冻结帧 + 丢音轨
       let isVideo = /\.(mp4|webm|mov|m4v|ogv|ogg|mkv|avi)$/i.test(local);
       // Broken-input gate: a video that ffprobe cannot time (truncated download, error page saved
@@ -364,15 +364,16 @@ export async function POST(
           continue;
         }
       }
-      const nativeAudio = isVideo ? await videoHasAudio(local) : false;
+      const narrationEnabled = Boolean((ttsConfig || useFreeTts) && shot.voiceover?.trim());
+      const nativeAudio = isVideo && !narrationEnabled ? await videoHasAudio(local) : false;
       const vo =
-        shot.voiceover && !nativeAudio
+        narrationEnabled
           ? await buildVoiceover(shot.shotId, shot.voiceover, shot.characterId ? characterVoices.get(shot.characterId) : undefined, shot.type)
           : undefined;
       const audioPath = vo?.file;
 
       // Effective duration (core fix for issue #14 "next segment starts before speech ends"):
-      // 1) TTS narration → actual audio length + breathing gap (clamped 1.5–20s); when the probe
+      // 1) TTS narration → actual audio length + breathing gap (minimum 1.5s); when the probe
       //    fails, estimate from text instead of falling back to the script's guessed duration,
       //    which used to hard-trim the narration mid-sentence;
       // 2) video with native voice → play out the real media length so model speech isn't cut;
@@ -385,7 +386,7 @@ export async function POST(
       if (audioPath) {
         const probed = await probeDuration(audioPath);
         voiceSec = probed > 0 ? probed : estimateSpeechSeconds(stripPauseMarks(shot.voiceover ?? ""));
-        duration = Math.min(Math.max(voiceSec + VOICE_GAP, 1.5), 20);
+        duration = Math.max(voiceSec + VOICE_GAP, 1.5);
         if (isVideo) {
           const mediaDur = await probeDuration(local);
           if (mediaDur > 0) sourceDuration = mediaDur;

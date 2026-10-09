@@ -10,14 +10,14 @@ describe("video control plan", () => {
       continuityReferenceUrl: "https://e.com/tail.png",
       motionReferenceUrl: "https://e.com/motion.mp4", audioReferenceUrl: "https://e.com/audio.wav",
     });
-    expect(plan).toMatchObject({ strategy: "reference-pack", mode: "image-to-video", referenceCount: 5,
+    expect(plan).toMatchObject({ strategy: "reference-pack", mode: "video-to-video", referenceCount: 5,
       warnings: ["reference-audio-unsupported"] });
-    expect(plan.firstFrameUrl).toBe("https://e.com/key.png");
-    expect(plan.lastFrameUrl).toBe("https://e.com/end.png");
-    expect(plan.referenceInputs.map((item) => item.role)).toEqual(["character", "product", "continuity"]);
+    expect(plan.firstFrameUrl).toBeUndefined();
+    expect(plan.lastFrameUrl).toBeUndefined();
+    expect(plan.referenceInputs.map((item) => item.role)).toEqual(["keyframe", "end-frame", "character", "product", "continuity"]);
     expect(plan.referenceInputs.every((item) => item.mediaType === "image")).toBe(true);
-    expect(plan.promptSuffix).toContain("@Image2=product appearance");
-    expect(plan.promptSuffix).toContain("@Image3=previous-shot continuity");
+    expect(plan.promptSuffix).toContain("@Image4=product appearance");
+    expect(plan.promptSuffix).toContain("@Image5=previous-shot continuity");
   });
 
   it("deduplicates Huabot images before numbering the product reference", () => {
@@ -26,10 +26,10 @@ describe("video control plan", () => {
       firstFrameUrl: "https://e.com/key.png", lastFrameUrl: "https://e.com/key.png",
       productReferenceUrl: "https://e.com/product.png", continuityReferenceUrl: "https://e.com/product.png",
     });
-    expect(plan.referenceCount).toBe(3);
-    expect(plan.referenceInputs.map((item) => item.role)).toEqual(["product"]);
-    expect(plan.promptSuffix).toContain("@Image1=product appearance");
-    expect(plan.promptSuffix).not.toContain("@Image2");
+    expect(plan.referenceCount).toBe(2);
+    expect(plan.referenceInputs.map((item) => item.role)).toEqual(["keyframe", "product"]);
+    expect(plan.promptSuffix).toContain("@Image2=product appearance");
+    expect(plan.promptSuffix).not.toContain("@Image3");
   });
 
   it("preserves Huabot native frames without extra image references", () => {

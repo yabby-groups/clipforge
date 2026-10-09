@@ -123,8 +123,8 @@ export function buildVideoControlPlan(input: {
   // provider's stronger native start/end-frame contract.
   const isAtlasReferenceMode = input.provider === "atlas-cloud" && hasVisualPack && canUseVisualPack && (!input.lastFrameUrl || hasIdentityPack);
   const isHuabotReferenceMode = input.provider === "huabot" && canUseVisualPack && optional.some((item) => item.mediaType === "image");
-  const isReferenceMode = isAtlasReferenceMode;
-  const canAttachAlongsideFrames = (input.provider === "volcengine" && hasVisualPack && canUseVisualPack) || isHuabotReferenceMode;
+  const isReferenceMode = isAtlasReferenceMode || isHuabotReferenceMode;
+  const canAttachAlongsideFrames = input.provider === "volcengine" && hasVisualPack && canUseVisualPack;
 
   if (hasVisualPack && !canUseVisualPack) warnings.push("reference-pack-unsupported");
   if (hasVisualPack && input.provider === "atlas-cloud" && canUseVisualPack && input.lastFrameUrl && !isAtlasReferenceMode) {
@@ -140,11 +140,11 @@ export function buildVideoControlPlan(input: {
     if (isNonEmpty(input.lastFrameUrl)) {
       referenceInputs.push({ url: input.lastFrameUrl, role: "end-frame", mediaType: "image", required: false });
     }
-    referenceInputs.push(...optional.filter((item) => item.mediaType !== "audio" || canUseAudioReference));
-  } else if (canAttachAlongsideFrames) {
     referenceInputs.push(...optional.filter((item) => isHuabotReferenceMode
       ? item.mediaType === "image"
       : item.mediaType !== "audio" || canUseAudioReference));
+  } else if (canAttachAlongsideFrames) {
+    referenceInputs.push(...optional.filter((item) => item.mediaType !== "audio" || canUseAudioReference));
   } else if (input.audioReferenceUrl && canUseAudioReference) {
     referenceInputs.push({ url: input.audioReferenceUrl, role: "audio", mediaType: "audio", required: false });
   }
@@ -162,8 +162,7 @@ export function buildVideoControlPlan(input: {
   const voiceoverBound = nativeAudio && isNonEmpty(input.voiceover);
   const audioMode: VideoControlSummary["audioMode"] = nativeAudio ? "native" : isNonEmpty(input.voiceover) ? "post" : "none";
   const audioPrompt = nativeAudio ? nativeAudioInstruction(input) : undefined;
-  // Huabot numbers input_references independently of its native frame_images.
-  const frameImageCount = canAttachAlongsideFrames && !isHuabotReferenceMode
+  const frameImageCount = canAttachAlongsideFrames
     ? Number(isNonEmpty(input.firstFrameUrl)) + Number(isNonEmpty(input.lastFrameUrl))
     : 0;
   const promptSuffix = [referenceInstruction(referenceInputs, input.locale, frameImageCount), audioPrompt].filter(Boolean).join(input.locale === "zh" ? "。" : " ");

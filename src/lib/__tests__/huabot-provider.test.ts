@@ -23,17 +23,23 @@ describe("HuabotProvider", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://huabot.com/api/v1/videos");
     const body = JSON.parse(init.body as string);
-    expect(body.input_references).toEqual(["person", "product"].map((name) => ({
+    expect(body.input_references).toEqual(["key", "end", "person", "product"].map((name) => ({
       type: "image_url", image_url: { url: `https://e.com/${name}.png` },
     })));
     expect(body.omni_reference_task_type).toBe("reference");
-    expect(body.prompt).toContain("@Image2=product appearance");
-    expect(body.frame_images).toEqual([
-      { type: "image_url", image_url: { url: "https://e.com/key.png" }, frame_type: "first_frame" },
-      { type: "image_url", image_url: { url: "https://e.com/end.png" }, frame_type: "last_frame" },
-    ]);
+    expect(body.prompt).toContain("@Image4=product appearance");
+    expect(body.frame_images).toBeUndefined();
     expect(body.image).toBeUndefined();
     expect(body.last_image).toBeUndefined();
+  });
+
+  it.each(["firstFrameUrl", "lastFrameUrl"] as const)("rejects references mixed with %s before upload or submission", async (frame) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new HuabotProvider({ name: "huabot", apiKey: "test" });
+    await expect(provider.submitVideoTask({ modelId: "seedance-2.0-mini", mode: "image-to-video", prompt: "test",
+      [frame]: "https://e.com/frame.png", referenceImageUrls: ["data:image/png;base64,aW1hZ2U="] })).rejects.toThrow("首尾帧不能与参考图混用");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it.each([false, true])("sends native data URL frames with last frame enabled: %s", async (withLastFrame) => {
@@ -122,9 +128,9 @@ describe("HuabotProvider", () => {
     );
   });
 
-  it("uploads local film references and sends all images with video output settings", async () => {
+  it("uploads local film references and sends video output settings", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ file: { file_key: "abcd-1234", file_ext: ".png" } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ file: { url: "/upload/a_/bc/a_bc12_34.png" } })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "film-1" })));
     vi.stubGlobal("fetch", fetchMock);
     const provider = new HuabotProvider({ name: "huabot", apiKey: "test", baseUrl: "https://huabot.com" });
@@ -135,9 +141,24 @@ describe("HuabotProvider", () => {
     const body = JSON.parse(fetchMock.mock.calls[1][1].body);
     expect(body).toMatchObject({ model: "doubao-seedance-2.0-mini", duration: 15, resolution: "720p", ratio: "9:16", generate_audio: true,
       input_references: [
-        { type: "image_url", image_url: { url: "https://huabot.com/upload/ab/cd/abcd1234.png" } },
+        { type: "image_url", image_url: { url: "https://huabot.com/upload/a_/bc/a_bc12_34.png" } },
         { type: "image_url", image_url: { url: "https://example.com/shot.png" } },
       ] });
+  });
+
+  it.each([
+    { file: { url: "/upload/gl/7q/gl7qe_YhxiKbVhckzAig7Nty7pjTeplleNphNcuKgoo.png" } },
+    { file: { url: "https://huabot.com/upload/gl/7q/gl7qe_YhxiKbVhckzAig7Nty7pjTeplleNphNcuKgoo.png" } },
+  ])("uses the returned upload URL from %j", async (result) => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(result)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "film-1" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new HuabotProvider({ name: "huabot", apiKey: "test" });
+    await provider.submitVideoTask({ modelId: "seedance-2.0-mini", mode: "video-to-video", prompt: "film",
+      referenceImageUrls: ["data:image/png;base64,aW1hZ2U="] });
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body.input_references[0].image_url.url).toBe("https://huabot.com/upload/gl/7q/gl7qe_YhxiKbVhckzAig7Nty7pjTeplleNphNcuKgoo.png");
   });
 
   it("rejects overlong Mini films before uploading references or submitting a paid task", async () => {

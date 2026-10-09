@@ -143,6 +143,9 @@ export class HuabotProvider extends BaseProvider {
     if ((options.referenceImageUrls?.length ?? 0) > 9) {
       throw new ProviderError("参考图不能超过 9 张", "BAD_REFERENCE", this.name);
     }
+    if (options.referenceImageUrls?.length && (options.firstFrameUrl || options.lastFrameUrl)) {
+      throw new ProviderError("首尾帧不能与参考图混用，请将首尾帧纳入参考图列表", "BAD_REFERENCE", this.name);
+    }
     const references = await Promise.all((options.referenceImageUrls ?? []).map(async (reference) => ({
       type: "image_url", image_url: { url: await this.videoReferenceUrl(reference) },
     })));
@@ -178,13 +181,8 @@ export class HuabotProvider extends BaseProvider {
       signal: AbortSignal.timeout(this.config.timeout ?? 120_000),
     });
     if (!response.ok) throw new ProviderError(`参考图上传失败: ${response.status}`, "BAD_REFERENCE", this.name);
-    const result = await response.json() as { file?: { file_key?: string; file_ext?: string } };
-    const key = result.file?.file_key?.replaceAll("-", "") ?? "";
-    const ext = result.file?.file_ext?.replace(/^\./, "").toLowerCase() ?? "";
-    if (!/^[a-zA-Z0-9]{4,}$/.test(key) || !/^[a-z0-9]+$/.test(ext)) {
-      throw new ProviderError("参考图上传未返回有效文件地址", "BAD_REFERENCE", this.name);
-    }
-    return `${this.config.baseUrl}/upload/${key.slice(0, 2)}/${key.slice(2, 4)}/${key}.${ext}`;
+    const result = await response.json() as { file: { url: string } };
+    return new URL(result.file.url, this.config.baseUrl).href;
   }
   async generateVideo(options: VideoOptions): Promise<VideoResult> {
     const started = Date.now(); const submitted = await this.submitVideoTask(options); const status = await this.pollTaskStatus(submitted.taskId, { interval: 5000 });
